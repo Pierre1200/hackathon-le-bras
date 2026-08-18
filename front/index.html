@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LE BRAS</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="ambient" aria-hidden="true"></div>
+
+  <div class="page">
+    <header class="fade-in" style="--delay: 0ms">
+      <div class="brand">
+        <svg class="brand__mark" viewBox="0 0 24 24" width="30" height="30" aria-hidden="true">
+          <rect x="1" y="1" width="22" height="22" rx="7" fill="url(#mark-gradient)" />
+          <path d="M7 12.5l3.2 3.2L17 9" stroke="#0d0e12" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+          <defs>
+            <linearGradient id="mark-gradient" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
+              <stop offset="0" stop-color="#9db1ff" />
+              <stop offset="1" stop-color="#5f7cff" />
+            </linearGradient>
+          </defs>
+        </svg>
+        <h1>LE BRAS</h1>
+      </div>
+      <p class="subtitle">Un agent qui ne se contente pas de parler : il agit. Mais rien ne part sans vous.</p>
+    </header>
+
+    <div id="status" class="status status--unknown fade-in" style="--delay: 100ms">
+      <span class="status__dot"></span>
+      <span id="status-text">Vérification du serveur…</span>
+    </div>
+
+    <main class="fade-in" style="--delay: 180ms">
+      <form id="message-form">
+        <textarea
+          id="message"
+          placeholder="Bonjour, réponds en une phrase."
+          rows="3"
+          maxlength="2000"
+          required
+        ></textarea>
+        <button type="submit" id="submit-btn">Envoyer</button>
+      </form>
+
+      <div id="result" class="result" hidden></div>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
