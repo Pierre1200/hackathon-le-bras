@@ -50,6 +50,29 @@ TARIFS = {
     "claude-haiku-4-5": (1.00, 5.00),
 }
 
+# Reglages supplementaires propres a chaque modele.
+#
+# POURQUOI CETTE TABLE EXISTE : tous les modeles n'acceptent pas les memes
+# parametres. Le parametre "effort", qui regle la profondeur de reflexion,
+# n'existe que sur les modeles recents ; l'envoyer a Haiku 4.5 fait echouer
+# la requete entiere avec une erreur 400.
+#
+# C'est exactement le role de cet adaptateur : absorber ces differences ici,
+# pour que le reste du projet puisse changer de modele sans rien savoir de
+# leurs particularites.
+#
+# Un modele absent de cette table recoit un dictionnaire vide, donc aucun
+# reglage supplementaire : c'est le comportement le plus sur par defaut.
+OPTIONS_PAR_MODELE = {
+    # "low" parce que le palier 2 ne demande qu'un aller-retour : on privilegie
+    # la rapidite. On remontera l'effort au palier 3, quand le planificateur
+    # devra vraiment raisonner pour construire un plan.
+    "claude-opus-5": {"output_config": {"effort": "low"}},
+    "claude-sonnet-5": {"output_config": {"effort": "low"}},
+    # Haiku 4.5 n'accepte pas le parametre "effort" : on ne lui envoie rien.
+    "claude-haiku-4-5": {},
+}
+
 
 # =============================================================================
 # LES TYPES QU'ON EXPOSE AU RESTE DU PROJET
@@ -113,10 +136,25 @@ def _cout(modele: str, tokens_entree: int, tokens_sortie: int) -> float:
     est un detail interne du fichier et n'est pas destinee a etre appelee
     depuis l'exterieur.
     """
-    # .get(modele, (0.0, 0.0)) : si le modele n'est pas dans notre table de
-    # tarifs, on renvoie 0 plutot que de faire planter le programme. Afficher
-    # un cout faux serait genant ; planter pour un affichage le serait plus.
-    prix_entree, prix_sortie = TARIFS.get(modele, (0.0, 0.0))
+    # ATTENTION, piege rencontre en vrai :
+    # le nom qu'on ENVOIE et le nom que l'API RENVOIE ne sont pas toujours
+    # identiques. On demande "claude-haiku-4-5" et l'API repond
+    # "claude-haiku-4-5-20251001", son identifiant date complet.
+    # Une simple recherche par egalite ne trouvait donc rien, et le cout
+    # s'affichait a 0.
+    #
+    # On cherche donc en deux temps : d'abord le nom exact, puis une cle de
+    # notre table dont le nom renvoye est une extension.
+    prix_entree, prix_sortie = 0.0, 0.0
+    if modele in TARIFS:
+        prix_entree, prix_sortie = TARIFS[modele]
+    else:
+        for cle, tarif in TARIFS.items():
+            if modele.startswith(cle):
+                prix_entree, prix_sortie = tarif
+                break
+    # Si aucun tarif n'est trouve, on renvoie 0 plutot que de faire planter le
+    # programme : un cout faux est genant, planter pour un affichage le serait plus.
     return (
         tokens_entree * prix_entree / 1_000_000
         + tokens_sortie * prix_sortie / 1_000_000
@@ -155,11 +193,12 @@ def demander_au_modele(message: str, prompt_systeme: str = "") -> ReponseLLM:
             # pour ne jamais couper une reponse au milieu d'une phrase.
             max_tokens=16000,
 
-            # L'effort controle a quel point le modele reflechit avant de repondre.
-            # "low" ici parce que le palier 2 ne demande qu'un aller-retour : on
-            # privilegie la rapidite. On le remontera au palier 3, quand le
-            # planificateur devra vraiment raisonner pour construire un plan.
-            output_config={"effort": "low"},
+            # Les reglages propres au modele choisi (voir OPTIONS_PAR_MODELE).
+            # La syntaxe `**dictionnaire` deplie le dictionnaire en arguments
+            # nommes : si le dictionnaire est vide, aucun argument n'est ajoute.
+            # C'est ce qui nous permet d'envoyer "effort" a certains modeles
+            # et rien du tout aux autres, sans ecrire de `if`.
+            **OPTIONS_PAR_MODELE.get(MODELE, {}),
 
             # Les consignes permanentes. On ne passe le parametre que s'il est
             # rempli : envoyer un system vide n'a pas de sens.
@@ -189,6 +228,18 @@ def demander_au_modele(message: str, prompt_systeme: str = "") -> ReponseLLM:
         )
     except anthropic.APIStatusError as e:
         # Filet de securite : toute autre reponse HTTP en erreur.
+        #
+        # Cas particulier du 400 : il signifie "ta requete est malformee",
+        # donc c'est NOTRE bug, pas celui de l'utilisateur. On remonte le
+        # message du fournisseur, qui dit precisement quel parametre pose
+        # probleme — sans lui, on cherche a l'aveugle.
+        # Ce message decrit un parametre d'API, il ne contient aucune donnee
+        # sensible ni aucune trace interne de notre code.
+        if e.status_code == 400:
+            raise ErreurLLM(
+                f"Requete refusee par le fournisseur (400) : {e.message} "
+                f"— verifie les reglages envoyes pour le modele {MODELE}."
+            )
         raise ErreurLLM(f"Le fournisseur a renvoye une erreur {e.status_code}.")
 
     # ---- Le modele peut refuser de repondre ----
