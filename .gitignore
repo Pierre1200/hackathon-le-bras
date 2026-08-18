@@ -48,3 +48,6 @@ outbox/*
 .vscode/
 .idea/
 *.swp
+
+# Antiseches perso pour les oraux (ne pas livrer)
+notes-oral-*.md
