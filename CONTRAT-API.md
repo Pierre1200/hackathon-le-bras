@@ -57,7 +57,7 @@ sinon l'utilisateur croit que rien ne se passe.
 
 Les erreurs ont toujours cette forme :
 ```json
-{ "detail": "Cle d'API invalide ou absente. Verifie ANTHROPIC_API_KEY dans le .env." }
+{ "detail": "Cle d'API refusee. Verifie LLM_API_KEY dans le .env, et qu'elle correspond bien au fournisseur configure." }
 ```
 
 ---

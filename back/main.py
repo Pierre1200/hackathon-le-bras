@@ -25,7 +25,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 # On importe NOTRE fonction et NOTRE erreur. Aucune trace du fournisseur ici.
-from back.llm import MODELE, ErreurLLM, demander_au_modele
+from back.llm import BASE_URL, MODELE, ErreurLLM, demander_au_modele
 
 # `app` est l'objet serveur. C'est lui que uvicorn va chercher quand on lance
 # `uvicorn back.main:app` — ce qui se lit : dans le module back.main, prends
@@ -97,8 +97,12 @@ def sante():
       - Au checkpoint, ca prouve en une seconde que le serveur est demarre.
 
     Elle n'appelle pas le modele : elle doit rester instantanee et gratuite.
+
+    Elle renvoie aussi le fournisseur configure. C'est precieux quand on en
+    change : on voit tout de suite a qui l'application parle, sans avoir a
+    ouvrir le .env.
     """
-    return {"statut": "ok", "modele": MODELE}
+    return {"statut": "ok", "modele": MODELE, "fournisseur": BASE_URL}
 
 
 @app.post("/api/message")

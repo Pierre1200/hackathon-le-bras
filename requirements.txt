@@ -1,6 +1,10 @@
 # Dependances du back. Versions figees pour que "git clone && pip install"
 # installe exactement ce qu'on a teste.
-anthropic==0.122.0
+#
+# On utilise le SDK openai comme CLIENT UNIVERSEL : il parle a n'importe
+# quelle API au format compatible OpenAI, y compris Anthropic. Le fournisseur
+# se choisit dans le .env, pas dans le code.
+openai==3.2.0
 fastapi==0.141.1
 uvicorn[standard]==0.52.3
 python-dotenv==1.2.3
