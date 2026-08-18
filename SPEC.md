@@ -3,9 +3,8 @@
 > **⚠️ NOTES DE PRÉPARATION — À SUPPRIMER AVANT LE CHECKPOINT**
 > Toutes les lignes qui commencent par `> 💬` sont des notes pour vous, pas pour le jury.
 > Pour les retrouver toutes avant de rendre : `grep -n "💬" SPEC.md`
-> Tout ce qui est entre `[[ ]]` est à remplir par vous.
 
-**Binôme :** [[Prénom 1]] & [[Prénom 2]]
+**Binôme :** Kevin Rigal & Pierre Rouvellat
 **Sujet choisi :** 03 — LE BRAS
 **Date :** [[jour 1, matin]]
 
@@ -199,8 +198,8 @@ on renvoie le résultat précédent. Rejouer un plan deux fois ne crée donc jam
 
 | Bloc | Responsable principal | Relecteur (doit savoir l'expliquer) |
 |---|---|---|
-| Planificateur + prompt système | [[Prénom 1]] | [[Prénom 2]] |
-| Exécuteur + idempotence | [[Prénom 2]] | [[Prénom 1]] |
+| Planificateur + prompt système | [[Pierre Rouvellat]] | [[Kevin Rigal]] |
+| Exécuteur + idempotence | [[Pierre Rouvellat]] | [[Kevin Rigal]] |
 | Outils (lecture) | [[...]] | [[...]] |
 | Outils (écriture + faux services) | [[...]] | [[...]] |
 | Base de données + journal d'audit | [[...]] | [[...]] |
@@ -211,9 +210,6 @@ on renvoie le résultat précédent. Rejouer un plan deux fois ne crée donc jam
 **Rituel de relecture croisée :** 20 minutes chaque soir. Chacun explique à l'autre les fichiers
 qu'il n'a pas écrits. Si l'un sèche, on relit ensemble avant de rentrer.
 
-**Alternance aux checkpoints :** palier 1 → [[Prénom 1]] présente · palier 2 → [[Prénom 2]] ·
-palier 3 → [[Prénom 1]] · palier 4 → [[Prénom 2]] · palier 5 → [[Prénom 1]] · palier 6 → [[Prénom 2]].
-
 ---
 
 ## 9. Checklist avant de traverser la salle (palier 1)
@@ -221,7 +217,6 @@ palier 3 → [[Prénom 1]] · palier 4 → [[Prénom 2]] · palier 5 → [[Prén
 > 💬 Une checklist incomplète coûte 20 minutes d'attente. Relisez-la à voix haute, à deux.
 
 - [ ] SPEC.md : problème en 5 lignes ✓ / 3 user stories ✓ / hors-scope ≥ 5 items ✓
-- [ ] Schéma d'architecture (fichier **et** tableau blanc photographié)
 - [ ] Tableau des outils : nom + signature typée + effet de bord oui/non pour chacun
 - [ ] Happy path en 6 étapes numérotées
 - [ ] Partage du travail écrit
