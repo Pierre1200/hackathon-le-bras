@@ -1,6 +1,6 @@
 # SPEC — LE BRAS
 
-**Binôme :** Pierre & Kevin
+**Binôme :** Pierre Rouvellat & Kevin Rigal
 **Sujet choisi :** 03 — LE BRAS
 **Hackathon Full Stack Agentique IA — Jour 1, matin**
 
