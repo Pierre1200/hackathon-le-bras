@@ -1,0 +1,50 @@
+# ==========================================================
+#  SECRETS — ne JAMAIS commiter. Une cle d'API commitee = -10 points.
+# ==========================================================
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+secrets/
+
+# ==========================================================
+#  Python
+# ==========================================================
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ==========================================================
+#  Node / front
+# ==========================================================
+node_modules/
+dist/
+build/
+.next/
+*.log
+npm-debug.log*
+
+# ==========================================================
+#  Base de donnees locale et sorties de nos faux services
+#  (on versionne le dossier, pas son contenu : voir outbox/.gitkeep)
+# ==========================================================
+*.db
+*.sqlite
+*.sqlite3
+outbox/*
+!outbox/.gitkeep
+
+# ==========================================================
+#  Systeme / editeurs
+# ==========================================================
+.DS_Store
+.vscode/
+.idea/
+*.swp
