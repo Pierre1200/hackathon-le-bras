@@ -20,8 +20,11 @@ Lancement :
     .venv/bin/uvicorn back.main:app --reload
 """
 
+from pathlib import Path
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 # On importe NOTRE fonction et NOTRE erreur. Aucune trace du fournisseur ici.
@@ -145,3 +148,21 @@ def envoyer_message(demande: DemandeMessage):
         # et on veut afficher le cout a l'ecran (carte bonus "cout affiche").
         "cout_dollars": round(reponse.cout_dollars, 6),
     }
+
+
+# ---------------------------------------------------------------------------
+# LE FRONT
+# ---------------------------------------------------------------------------
+# On fait servir les fichiers du front par ce meme serveur. Trois avantages :
+#   - une seule commande a lancer, donc un quickstart plus court ;
+#   - une seule URL, donc un seul deploiement au lieu de deux ;
+#   - le front et l'API partagent la meme origine, donc plus aucun probleme
+#     de CORS a l'usage.
+#
+# html=True fait servir index.html automatiquement quand on demande "/".
+#
+# ATTENTION A L'ORDRE : ce montage doit rester LA DERNIERE chose declaree
+# dans ce fichier. Les routes sont examinees dans leur ordre de declaration ;
+# monte plus haut, il attraperait "/api/sante" avant nos propres routes.
+DOSSIER_FRONT = Path(__file__).parent.parent / "front"
+app.mount("/", StaticFiles(directory=DOSSIER_FRONT, html=True), name="front")

@@ -1,7 +1,13 @@
-// Base de l'API back (Pierre). CORS est ouvert exprès pour que ce front
-// puisse être servi depuis n'importe quel port, ou ouvert en file://
-// (voir CONTRAT-API.md).
-const API_BASE = "http://127.0.0.1:8000";
+// Base de l'API back (Pierre).
+// Le back sert désormais ce front lui-même, donc la page et l'API partagent
+// la même origine : une URL relative ("") suffit, et elle reste juste une
+// fois l'application déployée — une adresse en dur pointerait vers le
+// localhost du visiteur.
+// Si le fichier est ouvert directement depuis le disque (file://), il n'y a
+// pas d'origine HTTP à laquelle se rattacher : on vise alors le back local.
+const API_BASE = window.location.protocol.startsWith("http")
+  ? ""
+  : "http://127.0.0.1:8000";
 
 const statusEl = document.getElementById("status");
 const statusText = document.getElementById("status-text");
