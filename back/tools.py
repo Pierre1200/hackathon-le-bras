@@ -205,6 +205,56 @@ def envoyer_message(destinataire: str, sujet: str, corps: str) -> dict:
     return {"fichier": _chemin_affichable(chemin), "destinataire": destinataire, "sujet": sujet}
 
 
+# La procedure d'accueil de l'entreprise.
+#
+# Pourquoi c'est ici et pas dans le prompt systeme : c'est une donnee metier,
+# pas une consigne au modele. Les RH doivent pouvoir la faire evoluer sans
+# qu'on retouche le prompt. Aujourd'hui c'est un dictionnaire dans le code ;
+# le jour ou quelqu'un d'autre que nous doit l'editer, ca devient une table
+# SQLite sans que la signature de l'outil change.
+_ETAPES_COMMUNES = [
+    {"etape": "Creer la fiche de la personne dans l'annuaire", "outil": "creer_fiche_employe"},
+    {"etape": "Ouvrir un ticket de preparation du poste de travail", "outil": "creer_ticket"},
+    {"etape": "Envoyer le message de bienvenue", "outil": "envoyer_message"},
+    {"etape": "Generer le livret d'accueil", "outil": "generer_document"},
+]
+
+_ETAPES_PAR_FAMILLE = {
+    "technique": [
+        {"etape": "Ouvrir un ticket d'acces au depot de code et aux environnements",
+         "outil": "creer_ticket"},
+    ],
+    "design": [
+        {"etape": "Ouvrir un ticket d'acces aux outils de design et a la bibliotheque de composants",
+         "outil": "creer_ticket"},
+    ],
+}
+
+
+def _famille_du_poste(role: str) -> str:
+    """Devine la famille de metier a partir de l'intitule du poste."""
+    r = _sans_accents(role)
+    if any(mot in r for mot in ("developp", "ingenieur", "devops", "data", "technique")):
+        return "technique"
+    if any(mot in r for mot in ("design", "ux", "ui", "graphi")):
+        return "design"
+    return "autre"
+
+
+def procedure_accueil(role: str) -> dict:
+    """Renvoie la procedure d'accueil de l'entreprise pour un poste donne.
+
+    Outil de CONSULTATION : ne modifie rien. Il renseigne l'agent sur ce que
+    l'entreprise attend quand quelqu'un arrive, au lieu de le lui faire deviner.
+
+    Chaque etape indique l'outil a utiliser : l'agent n'a plus qu'a proposer les
+    actions correspondantes avec les bonnes valeurs.
+    """
+    famille = _famille_du_poste(role)
+    etapes = _ETAPES_COMMUNES + _ETAPES_PAR_FAMILLE.get(famille, [])
+    return {"role": role, "famille": famille, "etapes": etapes}
+
+
 def creer_fiche_employe(
     nom: str, role: str, departement: str, email: str, date_arrivee: str
 ) -> dict:
@@ -296,9 +346,11 @@ SCHEMA_ENVOYER_MESSAGE = {
         "description": (
             "Envoie un message a une personne (ex: message de bienvenue, "
             "notification). EFFET DE BORD REEL : ecrit un fichier dans outbox/. "
-            "N'appelle cet outil que si l'utilisateur demande explicitement "
-            "d'envoyer, notifier ou prevenir quelqu'un — jamais pour une simple "
-            "question d'information."
+            "Appelle cet outil dans deux cas : l'utilisateur demande d'envoyer, "
+            "notifier ou prevenir quelqu'un, OU une etape de la procedure "
+            "d'accueil prevoit un message. "
+            "Ne l'appelle jamais pour repondre a une simple question "
+            "d'information."
         ),
         "parameters": {
             "type": "object",
@@ -405,8 +457,9 @@ SCHEMA_GENERER_DOCUMENT = {
         "name": "generer_document",
         "description": (
             "Ecrit un document texte sur disque : livret d'accueil, recapitulatif, "
-            "note d'organisation. A utiliser quand l'utilisateur demande un "
-            "document, un recapitulatif ou un guide a conserver. "
+            "note d'organisation. Appelle cet outil dans deux cas : l'utilisateur "
+            "demande un document, un recapitulatif ou un guide a conserver, OU "
+            "une etape de la procedure d'accueil prevoit un document. "
             "Ne confonds pas avec envoyer_message : un document est un fichier "
             "qu'on garde, un message est adresse a quelqu'un."
         ),
@@ -424,10 +477,37 @@ SCHEMA_GENERER_DOCUMENT = {
     },
 }
 
+SCHEMA_PROCEDURE_ACCUEIL = {
+    "type": "function",
+    "function": {
+        "name": "procedure_accueil",
+        "description": (
+            "Donne la procedure d'accueil de l'entreprise pour un poste : la "
+            "liste des etapes a prevoir quand quelqu'un arrive, et l'outil a "
+            "utiliser pour chacune. "
+            "APPELLE TOUJOURS cet outil AVANT de preparer l'arrivee de "
+            "quelqu'un : ne devine pas ce qu'il faut faire, l'entreprise a une "
+            "procedure et c'est celle-la qu'il faut suivre. Propose ensuite une "
+            "action par etape."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "role": {
+                    "type": "string",
+                    "description": "Intitule du poste de la personne qui arrive, ex: 'Developpeuse full stack'.",
+                }
+            },
+            "required": ["role"],
+        },
+    },
+}
+
 SCHEMAS = [
     # Consultation — sans effet de bord
     SCHEMA_LISTER_EQUIPE,
     SCHEMA_CHERCHER_PERSONNE,
+    SCHEMA_PROCEDURE_ACCUEIL,
     # Action — avec effet de bord, donc jamais executes par la boucle
     SCHEMA_CREER_FICHE_EMPLOYE,
     SCHEMA_CREER_TICKET,
@@ -438,6 +518,7 @@ SCHEMAS = [
 OUTILS = {
     "lister_equipe": lister_equipe,
     "chercher_personne": chercher_personne,
+    "procedure_accueil": procedure_accueil,
     "creer_fiche_employe": creer_fiche_employe,
     "creer_ticket": creer_ticket,
     "envoyer_message": envoyer_message,

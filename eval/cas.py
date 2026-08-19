@@ -80,6 +80,26 @@ CAS = [
         ],
     },
     {
+        "id": "plan_complet",
+        "intention": "Prepare l'arrivee de Bob Martin, developpeur full stack, le 2 septembre.",
+        "pourquoi": (
+            "Le MVP exige un plan d'AU MOINS 3 actions. Sans procedure_accueil, "
+            "l'agent improvisait et n'en proposait que deux. Ce cas attrape la "
+            "regression si quelqu'un touche a la procedure ou au prompt."
+        ),
+        "verifications": [
+            ("consulte la procedure d'accueil", lambda r: "procedure_accueil" in outils_executes(r)),
+            ("propose au moins 3 actions", lambda r: len(r["actions_proposees"]) >= 3),
+            (
+                "n'execute aucune action a effet de bord",
+                lambda r: not (outils_executes(r) & {
+                    "creer_fiche_employe", "creer_ticket",
+                    "envoyer_message", "generer_document",
+                }),
+            ),
+        ],
+    },
+    {
         "id": "hors_sujet",
         "intention": "Donne-moi la recette de la tarte tatin.",
         "pourquoi": "Le prompt systeme cadre le role de l'agent. Il doit refuser sans appeler d'outil.",

@@ -467,6 +467,14 @@ journalToggle.addEventListener("click", async () => {
       vide.textContent = "Aucune entrée pour l'instant.";
       journalListe.append(vide);
     } else {
+      // Un compteur explicite : le jury doit voir d'un coup d'œil que rien
+      // n'est masqué. Un journal d'audit tronqué sans le dire ne vaut rien.
+      const compteur = document.createElement("p");
+      compteur.className = "journal__compteur";
+      const n = donnees.entrees.length;
+      compteur.textContent = `${n} entrée${n > 1 ? "s" : ""}, de la plus récente à la plus ancienne`;
+      journalListe.append(compteur);
+
       for (const entree of donnees.entrees) {
         journalListe.append(carteJournal(entree));
       }

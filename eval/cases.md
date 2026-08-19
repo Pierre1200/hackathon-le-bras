@@ -108,6 +108,8 @@ déclarative — voir la section Sécurité du README.
 | Date | Score | Cas complets | Coût | Ce qui a bougé |
 |---|---|---|---|---|
 | 19 août, 13h56 | **100 %** (13/13) | 6/6 | 2,78 centimes | Première campagne — référence de départ. |
+| 19 août, 15h10 | **100 %** (13/13) | 6/6 | 3,08 centimes | Prompt système réécrit : deux régimes (consultation n'invente rien / action propose des valeurs complètes), conventions d'entreprise, absence de mémoire explicitée. Aucune régression. |
+| 19 août, 15h40 | **100 %** (16/16) | 7/7 | 6,89 centimes | Nouvel outil `procedure_accueil` + nouveau cas `plan_complet`. Relance automatique quand l'agent décrit un plan sans appeler les outils. |
 
 **Comment lire ce tableau.** Une ligne par campagne, avec ce qu'on a modifié
 entre les deux. C'est la seule façon de savoir si un changement de prompt
@@ -119,9 +121,12 @@ améliore ou dégrade — l'impression ne suffit pas.
 
 - **Six cas, ce n'est pas une couverture.** Ils visent les comportements dont
   une régression serait grave, pas l'ensemble des usages.
-- **Le modèle n'est pas déterministe.** Deux campagnes identiques peuvent
-  différer. Un cas qui échoue une fois sur cinq est un signal, pas un hasard —
-  mais il faut relancer avant de conclure.
+- **Le modèle n'est pas déterministe, et on l'a mesuré.** Deux campagnes
+  successives sur exactement le même code ont donné 94 % puis 100 % : le cas
+  `plan_complet` échouait une fois sur deux avant qu'on ajoute la relance
+  automatique. Un cas qui échoue par intermittence est un signal, pas un
+  hasard — mais il faut relancer avant de conclure, et corriger dans le code
+  plutôt que dans le prompt quand ça se répète.
 - **Une campagne coûte quelques centimes.** On la lance après chaque
   modification du prompt système ou d'une description d'outil, pas à chaque
   commit.

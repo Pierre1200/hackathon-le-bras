@@ -15,6 +15,7 @@ import os
 import sys
 import tempfile
 import time
+from pathlib import Path
 
 # --- AVANT tout import du projet : on isole la base ---
 # Les modules du projet lisent ces variables au moment de leur import.
@@ -51,6 +52,7 @@ def lancer() -> int:
         print(f"{ROUGE}LLM_API_KEY absente : renseigne-la dans le .env.{FIN}")
         return 2
 
+    rapport: list[str] = []      # ce qu'on ecrira dans eval/dernier-rapport.md
     total_verifications = 0
     verifications_reussies = 0
     cas_reussis = 0
@@ -65,6 +67,8 @@ def lancer() -> int:
         debut = time.perf_counter()
         reponse_http = client.post("/api/message", json={"message": cas["intention"]})
         duree = time.perf_counter() - debut
+
+        rapport.append(f"\n## `{cas['id']}`\n\n> {cas['intention']}\n")
 
         if reponse_http.status_code != 200:
             print(f"  {ROUGE}ECHEC APPEL{FIN} — HTTP {reponse_http.status_code} :"
@@ -92,14 +96,23 @@ def lancer() -> int:
             if ok:
                 verifications_reussies += 1
                 print(f"  {VERT}v{FIN} {libelle}")
+                rapport.append(f"- ✅ {libelle}")
             else:
                 tout_bon = False
                 print(f"  {ROUGE}x{FIN} {libelle}")
+                rapport.append(f"- ❌ **{libelle}**")
 
         if tout_bon:
             cas_reussis += 1
 
         print(f"  {GRIS}{duree:.1f} s — {reponse['cout_dollars'] * 100:.3f} centime{FIN}\n")
+        rapport.append(
+            f"\nExécutés : `{'`, `'.join(executes)}` — "
+            f"proposés : `{'`, `'.join(proposes)}`  \n"
+            f"{duree:.1f} s, {reponse['cout_dollars'] * 100:.3f} centime\n"
+        )
+        rapport.append(f"<details><summary>Réponse de l'agent</summary>\n\n"
+                       f"```\n{reponse['reponse'][:800]}\n```\n</details>\n")
 
     duree_campagne = time.perf_counter() - debut_campagne
     score = round(100 * verifications_reussies / total_verifications) if total_verifications else 0
@@ -111,6 +124,22 @@ def lancer() -> int:
           f"{cas_reussis}/{len(CAS)} cas complets)")
     print(f"{GRIS}campagne : {duree_campagne:.1f} s — cout total "
           f"{cout_total * 100:.2f} centime{FIN}\n")
+
+    # On ecrit le rapport sur disque : la sortie du terminal defile et se perd,
+    # et un rapport lisible se montre au jury.
+    entete = (
+        f"# Rapport d'évaluation\n\n"
+        f"**Score : {score} %** — {verifications_reussies}/{total_verifications} "
+        f"vérifications, {cas_reussis}/{len(CAS)} cas complets  \n"
+        f"Campagne de {duree_campagne:.1f} s, coût total "
+        f"{cout_total * 100:.2f} centime\n\n"
+        f"Généré par `make eval`. Les cas sont décrits dans "
+        f"[cases.md](cases.md).\n"
+    )
+    Path(__file__).parent.joinpath("dernier-rapport.md").write_text(
+        entete + "\n".join(rapport) + "\n", encoding="utf-8"
+    )
+    print(f"{GRIS}rapport ecrit dans eval/dernier-rapport.md{FIN}\n")
 
     # Code de sortie non nul si tout n'est pas vert : utilisable en integration
     # continue, et honnete si on le lance devant quelqu'un.

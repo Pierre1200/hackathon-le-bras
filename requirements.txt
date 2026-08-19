@@ -8,3 +8,9 @@ openai==3.2.0
 fastapi==0.141.1
 uvicorn[standard]==0.52.3
 python-dotenv==1.2.3
+
+# Necessaires pour `make test`. On les met ici plutot que dans un fichier
+# separe : le quickstart doit tenir en une seule commande d'installation, et
+# quelqu'un qui clone le depot doit pouvoir lancer les tests immediatement.
+pytest==9.1.1
+httpx==0.28.1

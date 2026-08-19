@@ -76,7 +76,7 @@ MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "1000"))
 # Nombre maximum d'aller-retours modele <-> outils pour UNE question. Sans
 # ce plafond, un modele qui boucle sur un outil (ou un outil qui renvoie
 # toujours une erreur qu'il retente) ferait tourner le serveur indefiniment.
-MAX_TOOL_TURNS = 4
+MAX_TOOL_TURNS = 8
 
 # Tarifs publics en dollars par MILLION de tokens : (entree, sortie).
 # Sert uniquement a AFFICHER le cout (carte bonus "cout affiche" du bareme).
@@ -253,6 +253,9 @@ def demander_au_modele(message: str, prompt_systeme: str = "") -> ReponseLLM:
 
     trace: list[dict] = []
     actions_proposees: list[dict] = []
+    # On ne relance qu'UNE fois : sans ce drapeau, un modele qui s'entete
+    # ferait boucler la conversation indefiniment.
+    relance_faite = False
     tokens_entree_total = 0
     tokens_sortie_total = 0
     texte = ""
@@ -275,10 +278,47 @@ def demander_au_modele(message: str, prompt_systeme: str = "") -> ReponseLLM:
         demandes_outils = choix.tool_calls or []
 
         if not demandes_outils:
-            # Pas de demande d'outil : c'est la reponse finale.
+            # Pas de demande d'outil : le modele considere avoir fini.
             # `content` peut valoir None si le modele n'a produit que des
             # appels d'outils sans texte : `or ""` evite un crash sur .strip().
             texte = (choix.content or "").strip()
+
+            # ---- GARDE-FOU : le plan decrit mais pas propose ----
+            # Probleme observe en test, de facon intermittente : apres avoir
+            # consulte la procedure d'accueil, le modele redige les etapes en
+            # texte ("Etape 1 : creer la fiche...") au lieu d'appeler les
+            # outils. Le texte est joli, mais actions_proposees est vide :
+            # aucune carte n'apparait et l'utilisateur ne peut rien approuver.
+            #
+            # On ne se contente pas de le demander dans le prompt — on l'a
+            # essaye, ca marchait une fois sur quatre. On VERIFIE, et on
+            # relance une fois avec une consigne explicite.
+            #
+            # La condition est volontairement etroite : uniquement quand le
+            # modele a consulte la procedure d'accueil, donc quand on sait
+            # qu'un plan d'actions etait attendu. Une simple question de
+            # consultation ne declenche pas de relance.
+            a_consulte_la_procedure = any(
+                e["outil"] == "procedure_accueil" for e in trace
+            )
+            if a_consulte_la_procedure and not actions_proposees and not relance_faite:
+                relance_faite = True
+                conversation.append({"role": "assistant", "content": texte})
+                conversation.append(
+                    {
+                        "role": "user",
+                        "content": (
+                            "Tu as decrit les etapes en texte, mais tu n'as appele "
+                            "aucun outil d'action : rien n'est donc propose a "
+                            "l'utilisateur et il ne peut rien approuver. "
+                            "Appelle maintenant l'outil correspondant a CHAQUE "
+                            "etape de la procedure, avec des valeurs completes. "
+                            "N'ecris pas de texte tant que ce n'est pas fait."
+                        ),
+                    }
+                )
+                continue
+
             break
 
         # Le modele demande un ou plusieurs outils. Son propre message doit

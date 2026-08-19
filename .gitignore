@@ -53,3 +53,7 @@ documents/*
 
 # Antiseches perso pour les oraux (ne pas livrer)
 notes-oral-*.md
+
+# Rapport genere par `make eval` : on garde l historique des scores
+# dans eval/cases.md, pas un fichier qui se perime.
+eval/dernier-rapport.md
