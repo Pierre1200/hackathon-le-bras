@@ -20,6 +20,7 @@ Lancement :
     .venv/bin/uvicorn back.main:app --reload
 """
 
+import logging
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -27,8 +28,27 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+# Config minimale pour que les logs d'outils (back/tools.py) s'affichent
+# dans la console au fil de l'eau. Fait ici, une fois, au demarrage : au
+# checkpoint, la trace doit deja etre visible sans qu'on ajoute un print.
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
+
 # On importe NOTRE fonction et NOTRE erreur. Aucune trace du fournisseur ici.
 from back.llm import BASE_URL, MODELE, ErreurLLM, demander_au_modele
+
+# Prompt systeme provisoire pour le palier "outils" : le prompt definitif du
+# planificateur (voir AGENTS.md) viendra plus tard. Les deux regles qui
+# comptent ici : ne pas inventer de donnees, et dire clairement quand un
+# outil a echoue plutot que de fabriquer une reponse a la place.
+PROMPT_SYSTEME = (
+    "Tu es l'assistant interne d'une petite entreprise. Tu as acces a des "
+    "outils reels pour consulter l'annuaire de l'equipe et envoyer des "
+    "messages : utilise-les des que la question porte sur des personnes ou "
+    "demande d'envoyer quelque chose, et n'invente jamais un nom, un role, "
+    "un email ou une confirmation d'envoi. Si un outil renvoie une erreur, "
+    "dis clairement a l'utilisateur que tu n'as pas pu le faire et pourquoi, "
+    "au lieu de fabriquer une reponse a sa place."
+)
 
 # `app` est l'objet serveur. C'est lui que uvicorn va chercher quand on lance
 # `uvicorn back.main:app` — ce qui se lit : dans le module back.main, prends
@@ -121,7 +141,7 @@ def envoyer_message(demande: DemandeMessage):
     Au palier 3, c'est ici que le planificateur prendra sa place.
     """
     try:
-        reponse = demander_au_modele(demande.message)
+        reponse = demander_au_modele(demande.message, PROMPT_SYSTEME)
 
     except ErreurLLM as e:
         # On attrape NOTRE erreur (jamais celle du fournisseur) et on la
@@ -147,6 +167,10 @@ def envoyer_message(demande: DemandeMessage):
         # On arrondit a 6 decimales : un appel coute des fractions de centime,
         # et on veut afficher le cout a l'ecran (carte bonus "cout affiche").
         "cout_dollars": round(reponse.cout_dollars, 6),
+        # La sequence des outils reellement appeles pour CETTE reponse, dans
+        # l'ordre : de quoi remplir un panneau debug cote front sans avoir a
+        # aller chercher les logs serveur.
+        "outils_appeles": reponse.trace,
     }
 
 
