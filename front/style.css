@@ -221,6 +221,62 @@ button:disabled {
   color: var(--down);
 }
 
+/* Panneau debug : la sequence des outils appeles, pour le palier "outils"
+   (montrable en quelques secondes, sans ouvrir la console). */
+.trace {
+  margin-top: 0.75rem;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg) 65%, transparent);
+  border: 1px dashed var(--border);
+  font-size: 0.82rem;
+  animation: fade-in 0.3s ease-out;
+}
+
+.trace__titre {
+  margin: 0 0 0.5rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.72rem;
+}
+
+.trace__liste {
+  list-style: decimal;
+  margin: 0;
+  padding-left: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.trace__item {
+  color: var(--text);
+}
+
+.trace__outil {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.trace__args,
+.trace__resultat {
+  margin: 0.2rem 0 0;
+  padding: 0.4rem 0.6rem;
+  background: var(--surface);
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--muted);
+}
+
+.trace__resultat--erreur {
+  color: var(--down);
+}
+
 /* Animation d'arrivée : chaque bloc entre en fondu + léger décalage
    vertical, décalé dans le temps via --delay pour un effet de cascade. */
 .fade-in {

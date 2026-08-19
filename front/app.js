@@ -15,6 +15,8 @@ const form = document.getElementById("message-form");
 const messageInput = document.getElementById("message");
 const submitBtn = document.getElementById("submit-btn");
 const result = document.getElementById("result");
+const trace = document.getElementById("trace");
+const traceListe = document.getElementById("trace-liste");
 
 async function verifierSante() {
   try {
@@ -36,6 +38,42 @@ function formaterCout(dollars) {
   return `${centimes.toFixed(2).replace(".", ",")} centime`;
 }
 
+// Panneau debug : la séquence des outils réellement appelés pour produire
+// la réponse (palier "outils" — doit être montrable en 30 secondes, sans
+// ajouter de print). `outils` peut être vide (aucun outil nécessaire) ou
+// absent (ancien back sans ce champ) : dans les deux cas on masque le panneau.
+function afficherTrace(outils) {
+  traceListe.replaceChildren();
+
+  if (!outils || outils.length === 0) {
+    trace.hidden = true;
+    return;
+  }
+
+  for (const appel of outils) {
+    const item = document.createElement("li");
+    item.className = "trace__item";
+
+    const nom = document.createElement("code");
+    nom.className = "trace__outil";
+    nom.textContent = appel.outil;
+
+    const args = document.createElement("pre");
+    args.className = "trace__args";
+    args.textContent = JSON.stringify(appel.arguments);
+
+    const resultat = document.createElement("pre");
+    const enErreur = appel.resultat && typeof appel.resultat === "object" && "erreur" in appel.resultat;
+    resultat.className = enErreur ? "trace__resultat trace__resultat--erreur" : "trace__resultat";
+    resultat.textContent = JSON.stringify(appel.resultat);
+
+    item.append(nom, args, resultat);
+    traceListe.append(item);
+  }
+
+  trace.hidden = false;
+}
+
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
 
@@ -47,6 +85,7 @@ form.addEventListener("submit", async (event) => {
   result.hidden = false;
   result.className = "result loading";
   result.textContent = "L'agent réfléchit…";
+  trace.hidden = true;
 
   try {
     const reponse = await fetch(`${API_BASE}/api/message`, {
@@ -82,6 +121,7 @@ form.addEventListener("submit", async (event) => {
     cout.textContent = `${formaterCout(donnees.cout_dollars)} — ${donnees.tokens_entree} tokens entrée / ${donnees.tokens_sortie} sortie`;
 
     result.append(texte, cout);
+    afficherTrace(donnees.outils_appeles);
   } catch (error) {
     result.className = "result error";
     result.textContent = error.message;
