@@ -24,6 +24,7 @@ jamais une exception remonter.
 import logging
 import os
 import sqlite3
+import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -43,6 +44,24 @@ OUTBOX_DIR = RACINE / os.getenv("OUTBOX_DIR", "./outbox")
 
 def _connexion() -> sqlite3.Connection:
     return sqlite3.connect(DB_PATH)
+
+
+def _sans_accents(texte: str) -> str:
+    """
+    Met un texte en minuscules et lui retire ses accents, pour pouvoir
+    comparer deux chaines sans se soucier de la frappe de l'utilisateur.
+
+    Pourquoi c'est necessaire : on a decouvert en testant que "le mail de
+    Chloe" ne trouvait rien, parce que la base contient "Chloe" sans accent.
+    Un utilisateur ecrit "Chloe", "Ingenierie" ou "ingenierie" indifferemment.
+    Sans cette normalisation, l'agent repondrait que la personne n'existe pas.
+
+    Comment ca marche : NFD separe chaque lettre accentuee en deux caracteres
+    (la lettre nue, puis l'accent). On supprime ensuite tout ce qui est un
+    accent — categorie Unicode "Mn", pour "Mark, nonspacing".
+    """
+    decompose = unicodedata.normalize("NFD", texte)
+    return "".join(c for c in decompose if unicodedata.category(c) != "Mn").lower()
 
 
 def _initialiser_base() -> None:
@@ -86,13 +105,52 @@ def lister_equipe(departement: str) -> list[dict]:
     """Cherche les membres d'un departement dans l'annuaire SQLite (recherche
     partielle, insensible a la casse). Renvoie une liste vide si personne ne
     correspond — ce n'est pas une erreur, juste un resultat vide."""
+    # On lit toute la table puis on filtre en Python, parce que le LIKE de
+    # SQLite ne sait pas ignorer les accents. L'annuaire d'une petite
+    # entreprise tient en memoire sans probleme ; sur une vraie base on
+    # ajouterait une colonne deja normalisee et on filtrerait en SQL.
     with _connexion() as db:
         db.row_factory = sqlite3.Row
         lignes = db.execute(
-            "SELECT nom, role, departement, email FROM employes WHERE departement LIKE ?",
-            (f"%{departement}%",),
+            "SELECT nom, role, departement, email FROM employes"
         ).fetchall()
-    return [dict(ligne) for ligne in lignes]
+
+    recherche = _sans_accents(departement)
+    return [
+        dict(ligne)
+        for ligne in lignes
+        if recherche in _sans_accents(ligne["departement"])
+    ]
+
+
+def chercher_personne(nom: str) -> list[dict]:
+    """Cherche une personne par son NOM dans l'annuaire (recherche partielle,
+    insensible a la casse).
+
+    Pourquoi cet outil existe alors que lister_equipe fait deja une recherche :
+    lister_equipe ne cherche que par departement. Pour retrouver quelqu'un dont
+    on ne connait que le nom, le modele devait balayer les departements un par
+    un — on a mesure quatre appels pour trouver une seule personne. Un outil
+    qui repond en un appel coute moins cher, va plus vite, et laisse moins de
+    place a l'erreur.
+
+    On plafonne a 5 resultats : un outil bien fait renvoie peu et deja digere.
+    Renvoyer tout l'annuaire remplirait le contexte du modele pour rien.
+    """
+    # Meme raison que dans lister_equipe : on filtre en Python pour ignorer
+    # les accents et la casse.
+    with _connexion() as db:
+        db.row_factory = sqlite3.Row
+        lignes = db.execute(
+            "SELECT nom, role, departement, email FROM employes"
+        ).fetchall()
+
+    recherche = _sans_accents(nom)
+    trouves = [
+        dict(ligne) for ligne in lignes if recherche in _sans_accents(ligne["nom"])
+    ]
+    # On plafonne a 5 : un outil bien fait renvoie peu et deja digere.
+    return trouves[:5]
 
 
 def envoyer_message(destinataire: str, sujet: str, corps: str) -> dict:
@@ -159,10 +217,38 @@ SCHEMA_ENVOYER_MESSAGE = {
     },
 }
 
-SCHEMAS = [SCHEMA_LISTER_EQUIPE, SCHEMA_ENVOYER_MESSAGE]
+SCHEMA_CHERCHER_PERSONNE = {
+    "type": "function",
+    "function": {
+        "name": "chercher_personne",
+        "description": (
+            "Retrouve une personne a partir de son NOM ou d'une partie de son "
+            "nom, et renvoie son role, son departement et son email. "
+            "A utiliser des que tu connais le nom de quelqu'un et qu'il te "
+            "manque une de ces informations. "
+            "Ne confonds pas avec lister_equipe : ici tu pars d'un NOM, "
+            "lister_equipe part d'un DEPARTEMENT. Si tu cherches une personne "
+            "precise, utilise cet outil — n'essaie pas de deviner son "
+            "departement pour la retrouver."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "nom": {
+                    "type": "string",
+                    "description": "Nom ou partie du nom recherche, ex: 'Alice', 'Dupont', 'Alice Dupont'.",
+                }
+            },
+            "required": ["nom"],
+        },
+    },
+}
+
+SCHEMAS = [SCHEMA_LISTER_EQUIPE, SCHEMA_CHERCHER_PERSONNE, SCHEMA_ENVOYER_MESSAGE]
 
 OUTILS = {
     "lister_equipe": lister_equipe,
+    "chercher_personne": chercher_personne,
     "envoyer_message": envoyer_message,
 }
 
