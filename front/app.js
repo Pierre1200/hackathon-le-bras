@@ -1,7 +1,10 @@
-// Base de l'API back (Pierre). CORS est ouvert exprès pour que ce front
-// puisse être servi depuis n'importe quel port, ou ouvert en file://
-// (voir CONTRAT-API.md).
-const API_BASE = "http://127.0.0.1:8000";
+// Base de l'API back (Pierre). Le back sert désormais ce front lui-même,
+// donc la page et l'API partagent la même origine : une URL relative ("")
+// suffit, et elle reste juste une fois l'application déployée — une adresse
+// en dur pointerait vers le localhost du visiteur.
+// Si le fichier est ouvert directement depuis le disque (file://), il n'y a
+// pas d'origine HTTP à laquelle se rattacher : on vise alors le back local.
+const API_BASE = window.location.protocol.startsWith("http") ? "" : "http://127.0.0.1:8000";
 
 const statusEl = document.getElementById("status");
 const statusText = document.getElementById("status-text");
@@ -9,6 +12,10 @@ const form = document.getElementById("message-form");
 const messageInput = document.getElementById("message");
 const submitBtn = document.getElementById("submit-btn");
 const result = document.getElementById("result");
+const trace = document.getElementById("trace");
+const traceListe = document.getElementById("trace-liste");
+const propositions = document.getElementById("propositions");
+const propositionsListe = document.getElementById("propositions-liste");
 
 async function verifierSante() {
   try {
@@ -30,6 +37,108 @@ function formaterCout(dollars) {
   return `${centimes.toFixed(2).replace(".", ",")} centime`;
 }
 
+// Panneau debug : la séquence des outils réellement appelés pour produire
+// la réponse (palier "outils" — doit être montrable en 30 secondes, sans
+// ajouter de print). `outils` peut être vide (aucun outil nécessaire) ou
+// absent (ancien back sans ce champ) : dans les deux cas on masque le panneau.
+function afficherTrace(outils) {
+  traceListe.replaceChildren();
+
+  if (!outils || outils.length === 0) {
+    trace.hidden = true;
+    return;
+  }
+
+  for (const appel of outils) {
+    const item = document.createElement("li");
+    item.className = "trace__item";
+
+    const entete = document.createElement("div");
+    entete.className = "trace__entete";
+
+    const nom = document.createElement("code");
+    nom.className = "trace__outil";
+    nom.textContent = appel.outil;
+    entete.append(nom);
+
+    // Le statut est le cœur du projet : un outil de lecture est EXÉCUTÉ tout
+    // de suite, un outil à effet de bord est seulement PROPOSÉ (voir le
+    // panneau "actions proposées" ci-dessous). Les deux doivent se voir d'un
+    // coup d'œil, pas seulement se lire.
+    if (appel.statut) {
+      const badge = document.createElement("span");
+      const executee = appel.statut === "executee";
+      badge.className = `trace__badge ${executee ? "trace__badge--executee" : "trace__badge--proposee"}`;
+      badge.textContent = executee ? "Exécutée" : "Proposée";
+      entete.append(badge);
+    }
+
+    // La durée n'a de sens que pour un outil réellement exécuté : une action
+    // proposée n'a encore rien fait, donc rien à chronométrer.
+    if (appel.statut === "executee" && typeof appel.duree_ms === "number") {
+      const duree = document.createElement("span");
+      duree.className = "trace__duree";
+      duree.textContent = `${appel.duree_ms} ms`;
+      entete.append(duree);
+    }
+
+    const args = document.createElement("pre");
+    args.className = "trace__args";
+    args.textContent = JSON.stringify(appel.arguments);
+
+    const resultat = document.createElement("pre");
+    const enErreur = appel.resultat && typeof appel.resultat === "object" && "erreur" in appel.resultat;
+    resultat.className = enErreur ? "trace__resultat trace__resultat--erreur" : "trace__resultat";
+    resultat.textContent = JSON.stringify(appel.resultat);
+
+    item.append(entete, args, resultat);
+    traceListe.append(item);
+  }
+
+  trace.hidden = false;
+}
+
+// Panneau "actions proposées" : les outils à effet de bord (ex: envoyer un
+// message) ne sont jamais exécutés par le back — ils sont enregistrés en
+// attente. Rien n'est encore approuvable depuis cet écran (pas de route back
+// pour ça) : on les affiche en lecture seule, comme un aperçu de ce qui
+// attend une décision.
+function afficherPropositions(actions) {
+  propositionsListe.replaceChildren();
+
+  if (!actions || actions.length === 0) {
+    propositions.hidden = true;
+    return;
+  }
+
+  for (const action of actions) {
+    const item = document.createElement("li");
+    item.className = "propositions__item";
+
+    const entete = document.createElement("div");
+    entete.className = "propositions__entete";
+
+    const outil = document.createElement("code");
+    outil.className = "propositions__outil";
+    outil.textContent = action.outil;
+
+    const id = document.createElement("span");
+    id.className = "propositions__id";
+    id.textContent = action.id;
+
+    entete.append(outil, id);
+
+    const args = document.createElement("pre");
+    args.className = "propositions__args";
+    args.textContent = JSON.stringify(action.arguments, null, 2);
+
+    item.append(entete, args);
+    propositionsListe.append(item);
+  }
+
+  propositions.hidden = false;
+}
+
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
 
@@ -41,6 +150,8 @@ form.addEventListener("submit", async (event) => {
   result.hidden = false;
   result.className = "result loading";
   result.textContent = "L'agent réfléchit…";
+  trace.hidden = true;
+  propositions.hidden = true;
 
   try {
     const reponse = await fetch(`${API_BASE}/api/message`, {
@@ -76,6 +187,8 @@ form.addEventListener("submit", async (event) => {
     cout.textContent = `${formaterCout(donnees.cout_dollars)} — ${donnees.tokens_entree} tokens entrée / ${donnees.tokens_sortie} sortie`;
 
     result.append(texte, cout);
+    afficherTrace(donnees.outils_appeles);
+    afficherPropositions(donnees.actions_proposees);
   } catch (error) {
     result.className = "result error";
     result.textContent = error.message;

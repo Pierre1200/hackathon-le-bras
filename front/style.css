@@ -9,6 +9,7 @@
   --accent-2: #a78bfa;
   --ok: #4caf50;
   --down: #ff6c6c;
+  --attente: #f5a623;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
@@ -219,6 +220,165 @@ button:disabled {
   background: color-mix(in srgb, var(--down) 8%, transparent);
   border: 1px solid color-mix(in srgb, var(--down) 30%, transparent);
   color: var(--down);
+}
+
+/* Panneau debug : la sequence des outils appeles, pour le palier "outils"
+   (montrable en quelques secondes, sans ouvrir la console). */
+.trace {
+  margin-top: 0.75rem;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg) 65%, transparent);
+  border: 1px dashed var(--border);
+  font-size: 0.82rem;
+  animation: fade-in 0.3s ease-out;
+}
+
+.trace__titre {
+  margin: 0 0 0.5rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.72rem;
+}
+
+.trace__liste {
+  list-style: decimal;
+  margin: 0;
+  padding-left: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.trace__item {
+  color: var(--text);
+}
+
+.trace__outil {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.trace__entete {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* Le statut est le cœur du projet : lecture exécutée tout de suite (vert) vs
+   effet de bord seulement proposé, en attente d'accord (ambre). Doit se voir
+   d'un coup d'œil, pas seulement se lire. */
+.trace__badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.trace__badge--executee {
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 15%, transparent);
+}
+
+.trace__badge--proposee {
+  color: var(--attente);
+  background: color-mix(in srgb, var(--attente) 15%, transparent);
+}
+
+.trace__duree {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.trace__args,
+.trace__resultat {
+  margin: 0.2rem 0 0;
+  padding: 0.4rem 0.6rem;
+  background: var(--surface);
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--muted);
+}
+
+.trace__resultat--erreur {
+  color: var(--down);
+}
+
+/* Panneau "actions proposées" : les outils à effet de bord ne sont jamais
+   exécutés automatiquement, seulement enregistrés en attente d'accord — le
+   cœur du projet (voir SPEC.md). Traitement ambre, plus affirmé que le
+   panneau debug, pour que ça se distingue clairement d'un simple log. */
+.propositions {
+  margin-top: 0.75rem;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--attente) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--attente) 35%, transparent);
+  font-size: 0.82rem;
+  animation: fade-in 0.3s ease-out;
+}
+
+.propositions__titre {
+  margin: 0 0 0.6rem;
+  font-weight: 600;
+  color: var(--attente);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.72rem;
+}
+
+.propositions__liste {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.propositions__item {
+  padding: 0.6rem 0.75rem;
+  background: var(--surface);
+  border-radius: 8px;
+}
+
+.propositions__entete {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.propositions__outil {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.propositions__id {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.propositions__args {
+  margin: 0.4rem 0 0;
+  padding: 0.4rem 0.6rem;
+  background: color-mix(in srgb, var(--bg) 45%, transparent);
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text);
 }
 
 /* Animation d'arrivée : chaque bloc entre en fondu + léger décalage
