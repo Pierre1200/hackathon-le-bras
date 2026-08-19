@@ -140,6 +140,68 @@ Un aller-retour coûte de l'ordre de **0,2 centime**.
 
 ---
 
+## Sécurité
+
+### Les clés d'API ne quittent jamais le serveur
+
+Le navigateur ne parle qu'à notre API ; c'est notre API qui parle au
+fournisseur. La clé est lue depuis un `.env` jamais commité. Si le front
+appelait le fournisseur directement, il faudrait lui confier la clé et
+n'importe qui pourrait la lire dans le code de la page.
+
+### « Que se passe-t-il si l'utilisateur écrit *ignore tes instructions précédentes* ? »
+
+**Il peut convaincre le modèle. Il ne peut rien déclencher.**
+
+C'est la distinction qui structure tout le projet : le prompt système est une
+consigne, et une consigne se contourne. Les garanties, elles, sont
+structurelles :
+
+1. **Le modèle ne peut appeler que les outils déclarés.** Aucun accès au
+   système de fichiers, au réseau ou à la base en dehors d'eux.
+2. **Un outil à effet de bord n'est jamais exécuté par la boucle.** Il est
+   enregistré comme proposition. Même un modèle entièrement retourné ne peut
+   qu'ajouter une carte à approuver.
+3. **L'exécution exige un identifiant transmis par l'utilisateur.** Un seul
+   chemin de code appelle un outil à effet de bord, et il part d'une liste
+   d'identifiants explicitement approuvés. Tout ce qui n'y est pas est refusé.
+
+Autrement dit : une injection réussie produit une proposition visible à
+l'écran, que l'utilisateur peut refuser. Elle ne produit pas d'action.
+
+Un cas d'évaluation vérifie ce comportement à chaque campagne
+(`injection_de_prompt` dans [eval/cases.md](eval/cases.md)).
+
+### Les résultats d'outils sont des données, pas des instructions
+
+Le prompt système le dit explicitement au modèle. Aujourd'hui nos outils lisent
+une base que nous contrôlons ; le jour où l'un d'eux lira du texte écrit par un
+tiers, ce texte ne devra pas pouvoir donner d'ordres à l'agent.
+
+### Ce qui n'est pas protégé
+
+- **Pas d'authentification.** Un seul utilisateur, hors scope assumé.
+- **Les arguments proposés ne sont pas validés.** Rien ne certifie qu'une date
+  proposée soit au bon format — conséquence assumée du passage à un client
+  universel.
+- **CORS ouvert à toutes les origines**, acceptable en développement, à
+  restreindre lors d'un déploiement public.
+
+---
+
+## Tests et évaluation
+
+```bash
+make test    # 26 tests automatisés, moins d'une seconde, aucun appel au modèle
+make eval    # rejoue les 6 cas d'évaluation et sort un score chiffré
+```
+
+Les tests couvrent les garanties du projet : seules les actions approuvées
+s'exécutent, l'idempotence empêche les doublons, l'annulation défait vraiment
+l'effet, aucun outil ne lève d'exception. Détail dans [eval/cases.md](eval/cases.md).
+
+---
+
 ## Limites connues
 
 - **Il faut votre propre clé d'API**, chez le fournisseur de votre choix. Sans clé

@@ -48,6 +48,22 @@ def _connexion() -> sqlite3.Connection:
     return sqlite3.connect(DB_PATH)
 
 
+def _chemin_affichable(chemin: Path) -> str:
+    """
+    Rend un chemin lisible : relatif a la racine du projet quand c'est
+    possible, absolu sinon.
+
+    Pourquoi ce n'est pas juste `relative_to(RACINE)` : cette methode LEVE une
+    exception si le chemin est ailleurs. Or OUTBOX_DIR et DOCS_DIR se
+    configurent dans le .env et rien n'oblige a les mettre dans le projet.
+    Bug trouve par les tests, qui utilisent un dossier temporaire.
+    """
+    try:
+        return str(chemin.relative_to(RACINE))
+    except ValueError:
+        return str(chemin)
+
+
 def _sans_accents(texte: str) -> str:
     """
     Met un texte en minuscules et lui retire ses accents, pour pouvoir
@@ -186,7 +202,7 @@ def envoyer_message(destinataire: str, sujet: str, corps: str) -> dict:
     nom_fichier = f"{horodatage}_{destinataire.replace(' ', '_').replace('/', '_')}.txt"
     chemin = OUTBOX_DIR / nom_fichier
     chemin.write_text(f"A : {destinataire}\nSujet : {sujet}\n\n{corps}\n", encoding="utf-8")
-    return {"fichier": str(chemin.relative_to(RACINE)), "destinataire": destinataire, "sujet": sujet}
+    return {"fichier": _chemin_affichable(chemin), "destinataire": destinataire, "sujet": sujet}
 
 
 def creer_fiche_employe(
@@ -241,7 +257,7 @@ def generer_document(nom_fichier: str, contenu: str) -> dict:
     nom_propre = Path(nom_fichier).name or "document.md"
     chemin = DOCS_DIR / nom_propre
     chemin.write_text(contenu, encoding="utf-8")
-    return {"fichier": str(chemin.relative_to(RACINE)), "taille_octets": len(contenu)}
+    return {"fichier": _chemin_affichable(chemin), "taille_octets": len(contenu)}
 
 
 # =============================================================================
@@ -484,13 +500,15 @@ def _annuler_creer_ticket(resultat: dict) -> dict:
 def _annuler_fichier(resultat: dict) -> dict:
     """Annulation commune a envoyer_message et generer_document : les deux
     ont ecrit un fichier, les deux s'annulent en le supprimant."""
-    chemin = (RACINE / resultat["fichier"]).resolve()
+    brut = Path(resultat["fichier"])
+    chemin = (brut if brut.is_absolute() else RACINE / brut).resolve()
 
-    # SECURITE : on ne supprime que sous la racine du projet. Le chemin vient
-    # de notre propre code, mais une verification coute une ligne et evite
-    # qu'une donnee corrompue en base ne fasse supprimer un fichier ailleurs.
-    if not chemin.is_relative_to(RACINE.resolve()):
-        raise ValueError(f"Chemin hors du projet : {resultat['fichier']}")
+    # SECURITE : on ne supprime QUE dans nos deux dossiers de sortie.
+    # C'est plus strict que "sous la racine du projet" : meme une donnee
+    # corrompue en base ne peut pas faire supprimer un fichier du code source.
+    dossiers_autorises = (OUTBOX_DIR.resolve(), DOCS_DIR.resolve())
+    if not any(chemin.is_relative_to(d) for d in dossiers_autorises):
+        raise ValueError(f"Chemin hors des dossiers de sortie : {resultat['fichier']}")
 
     # missing_ok=True : si le fichier a deja disparu (supprime a la main),
     # l'annulation reussit quand meme. Le but est que le fichier n'existe

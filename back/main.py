@@ -26,7 +26,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # Config minimale pour que les logs d'outils (back/tools.py) s'affichent
 # dans la console au fil de l'eau. Fait ici, une fois, au demarrage : au
@@ -120,6 +120,22 @@ class DemandeMessage(BaseModel):
     # min_length=1 refuse la chaine vide, max_length=2000 evite qu'on nous
     # envoie un roman qui couterait cher en tokens.
     message: str = Field(..., min_length=1, max_length=2000)
+
+    @field_validator("message")
+    @classmethod
+    def refuser_les_espaces_seuls(cls, valeur: str) -> str:
+        """
+        min_length=1 laisse passer "   " : trois espaces font bien trois
+        caracteres. Sans ce controle, un champ ou l'utilisateur n'a tape que
+        des espaces partirait au modele et couterait de l'argent pour rien.
+
+        On renvoie la version nettoyee : les espaces de bord ne servent a rien
+        et gonflent inutilement le nombre de tokens envoyes.
+        """
+        nettoye = valeur.strip()
+        if not nettoye:
+            raise ValueError("Le message ne peut pas contenir que des espaces.")
+        return nettoye
 
 
 # ---------------------------------------------------------------------------
