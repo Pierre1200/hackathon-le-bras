@@ -29,8 +29,10 @@ Regle a retenir : AUCUN autre fichier du projet n'a le droit d'ecrire
 `import openai`. Si ca arrive, l'abstraction est cassee.
 """
 
+import json
 import os
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import openai
@@ -43,6 +45,10 @@ from dotenv import load_dotenv
 # On construit le chemin ainsi, et pas en dur ("../.env"), pour que le
 # programme marche quel que soit le dossier depuis lequel on le lance.
 load_dotenv(Path(__file__).parent.parent / ".env")
+
+# Importe APRES load_dotenv() : tools.py lit lui aussi DATABASE_URL/OUTBOX_DIR
+# au chargement, il lui faut donc le .env deja charge.
+from back import tools
 
 
 # =============================================================================
@@ -66,6 +72,11 @@ MODELE = os.getenv("LLM_MODEL", "claude-haiku-4-5")
 # facturation : on ne paie que ce qui est reellement produit. Il protege
 # surtout contre une reponse a rallonge si l'app est exposee publiquement.
 MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "1000"))
+
+# Nombre maximum d'aller-retours modele <-> outils pour UNE question. Sans
+# ce plafond, un modele qui boucle sur un outil (ou un outil qui renvoie
+# toujours une erreur qu'il retente) ferait tourner le serveur indefiniment.
+MAX_TOOL_TURNS = 4
 
 # Tarifs publics en dollars par MILLION de tokens : (entree, sortie).
 # Sert uniquement a AFFICHER le cout (carte bonus "cout affiche" du bareme).
@@ -105,13 +116,18 @@ class ReponseLLM:
     cles existent.
 
     On expose les tokens et le cout : ils alimentent l'affichage a l'ecran et,
-    plus tard, le journal d'audit.
+    plus tard, le journal d'audit. `trace` alimente le panneau debug du front :
+    c'est la sequence des outils appeles pour repondre a CETTE question.
     """
-    texte: str            # la reponse du modele, en clair
-    modele: str           # quel modele a repondu
-    tokens_entree: int    # ce qu'on a envoye
-    tokens_sortie: int    # ce qu'il a produit
-    cout_dollars: float   # le cout estime de CET appel
+    texte: str                              # la reponse du modele, en clair
+    modele: str                              # quel modele a repondu
+    tokens_entree: int                       # ce qu'on a envoye
+    tokens_sortie: int                       # ce qu'il a produit
+    cout_dollars: float                      # le cout estime de CET appel
+    trace: list[dict] = field(default_factory=list)  # outils appeles, dans l'ordre
+    # Les actions a effet de bord que le modele PROPOSE. Elles ne sont pas
+    # executees : elles attendent l'approbation de l'utilisateur (palier 4).
+    actions_proposees: list[dict] = field(default_factory=list)
 
 
 # Le client est cree une seule fois, au chargement du fichier : il maintient
@@ -148,45 +164,23 @@ def _cout(modele: str, tokens_entree: int, tokens_sortie: int) -> float:
     )
 
 
-# =============================================================================
-# LA FONCTION PUBLIQUE — la seule chose que le reste du projet utilise
-# =============================================================================
-
-def demander_au_modele(message: str, prompt_systeme: str = "") -> ReponseLLM:
+def _appeler_le_fournisseur(conversation: list[dict]):
     """
-    Envoie un message au modele et rend sa reponse.
-
-    Parametres
-    ----------
-    message : le texte de l'utilisateur.
-    prompt_systeme : les consignes permanentes donnees au modele. Optionnel au
-        palier 2, ou l'on verifie seulement que le tuyau passe. A partir du
-        palier 3, c'est ici qu'on posera les regles du planificateur.
-
-    Renvoie
-    -------
-    Un objet ReponseLLM.
-
-    Leve
-    ----
-    ErreurLLM si l'appel echoue, quelle qu'en soit la raison.
+    Le SEUL endroit qui fait l'appel reseau. Extrait de demander_au_modele()
+    parce que la boucle d'appel d'outils ci-dessous doit pouvoir rappeler le
+    modele plusieurs fois de suite (une fois par aller-retour avec un outil),
+    en gardant exactement la meme traduction d'erreurs a chaque fois.
     """
-    # On construit la conversation. Un message "system" porte les consignes
-    # permanentes, un message "user" porte la demande. On n'ajoute le system
-    # que s'il est rempli : en envoyer un vide n'a pas de sens.
-    #
-    # A retenir : l'API est SANS MEMOIRE. Elle ne se souvient d'aucun echange
-    # precedent — c'est a nous de lui renvoyer tout le contexte a chaque appel.
-    conversation = []
-    if prompt_systeme:
-        conversation.append({"role": "system", "content": prompt_systeme})
-    conversation.append({"role": "user", "content": message})
-
     try:
-        reponse = _client.chat.completions.create(
+        return _client.chat.completions.create(
             model=MODELE,
             messages=conversation,
             max_tokens=MAX_TOKENS,
+            # "tools" decrit nos outils au modele (voir tools.py) ; "auto"
+            # le laisse decider LUI-MEME s'il en a besoin ou non. Le routage
+            # n'est jamais fait par notre code (pas de if "cherche" in message).
+            tools=tools.SCHEMAS,
+            tool_choice="auto",
         )
 
     # ---- On traduit les erreurs du fournisseur en NOTRE erreur ----
@@ -219,30 +213,194 @@ def demander_au_modele(message: str, prompt_systeme: str = "") -> ReponseLLM:
         # l'aveugle. Il decrit un probleme de requete, pas une donnee sensible.
         raise ErreurLLM(f"Erreur {e.status_code} du fournisseur : {e.message}")
 
-    # ---- On extrait le texte ----
-    # `choices` est une liste : l'API peut renvoyer plusieurs propositions.
-    # On n'en demande qu'une, donc on prend la premiere.
-    # `content` peut valoir None si le modele n'a rien produit : `or ""` evite
-    # de planter en appelant .strip() sur None.
-    texte = (reponse.choices[0].message.content or "").strip()
 
-    # ---- On compte les tokens ----
-    # Tous les fournisseurs compatibles ne renvoient pas le bloc `usage`.
-    # On verifie donc son existence plutot que de supposer qu'il est la : sinon
-    # l'app planterait chez celui qui branche un fournisseur plus minimaliste.
-    usage = reponse.usage
-    tokens_entree = usage.prompt_tokens if usage else 0
-    tokens_sortie = usage.completion_tokens if usage else 0
+# =============================================================================
+# LA FONCTION PUBLIQUE — la seule chose que le reste du projet utilise
+# =============================================================================
+
+def demander_au_modele(message: str, prompt_systeme: str = "") -> ReponseLLM:
+    """
+    Envoie un message au modele et rend sa reponse, en le laissant appeler
+    nos outils (voir tools.py) autant de fois qu'il le juge necessaire.
+
+    Parametres
+    ----------
+    message : le texte de l'utilisateur.
+    prompt_systeme : les consignes permanentes donnees au modele.
+
+    Renvoie
+    -------
+    Un objet ReponseLLM, dont `trace` liste les outils reellement appeles
+    (dans l'ordre), avec leurs arguments et leur resultat ou leur erreur.
+
+    Leve
+    ----
+    ErreurLLM si l'appel echoue, quelle qu'en soit la raison.
+    """
+    # On construit la conversation. Un message "system" porte les consignes
+    # permanentes, un message "user" porte la demande. On n'ajoute le system
+    # que s'il est rempli : en envoyer un vide n'a pas de sens.
+    #
+    # A retenir : l'API est SANS MEMOIRE. Elle ne se souvient d'aucun echange
+    # precedent — c'est a nous de lui renvoyer tout le contexte a chaque appel.
+    # Au fil de la boucle ci-dessous, `conversation` grandit : elle recoit le
+    # message de l'assistant qui demande un outil, puis le resultat de cet
+    # outil, avant qu'on rappelle le modele avec tout cet historique.
+    conversation = []
+    if prompt_systeme:
+        conversation.append({"role": "system", "content": prompt_systeme})
+    conversation.append({"role": "user", "content": message})
+
+    trace: list[dict] = []
+    actions_proposees: list[dict] = []
+    tokens_entree_total = 0
+    tokens_sortie_total = 0
+    texte = ""
+    reponse = None
+
+    # Boucle bornee par MAX_TOOL_TURNS (voir plus haut) : a chaque tour, soit
+    # le modele repond directement (on sort avec `break`), soit il demande un
+    # ou plusieurs outils (on les execute et on relance un tour).
+    for _ in range(MAX_TOOL_TURNS):
+        reponse = _appeler_le_fournisseur(conversation)
+
+        # Tous les fournisseurs compatibles ne renvoient pas le bloc `usage`.
+        # On verifie donc son existence plutot que de supposer qu'il est la.
+        usage = reponse.usage
+        if usage:
+            tokens_entree_total += usage.prompt_tokens
+            tokens_sortie_total += usage.completion_tokens
+
+        choix = reponse.choices[0].message
+        demandes_outils = choix.tool_calls or []
+
+        if not demandes_outils:
+            # Pas de demande d'outil : c'est la reponse finale.
+            # `content` peut valoir None si le modele n'a produit que des
+            # appels d'outils sans texte : `or ""` evite un crash sur .strip().
+            texte = (choix.content or "").strip()
+            break
+
+        # Le modele demande un ou plusieurs outils. Son propre message doit
+        # etre remis dans la conversation AVANT les resultats des outils :
+        # c'est le format attendu par l'API (chaque tool_call a besoin de
+        # savoir a quel message assistant il repond).
+        conversation.append(
+            {
+                "role": "assistant",
+                "content": choix.content,
+                "tool_calls": [
+                    {
+                        "id": appel.id,
+                        "type": "function",
+                        "function": {
+                            "name": appel.function.name,
+                            "arguments": appel.function.arguments,
+                        },
+                    }
+                    for appel in demandes_outils
+                ],
+            }
+        )
+
+        for appel in demandes_outils:
+            nom = appel.function.name
+            try:
+                arguments = json.loads(appel.function.arguments or "{}")
+            except json.JSONDecodeError:
+                # Le modele a produit un JSON invalide pour les arguments :
+                # on le traite comme un echec d'outil plutot que de planter.
+                arguments = {}
+
+            if tools.a_un_effet_de_bord(nom):
+                # ---- OUTIL D'ECRITURE : on N'EXECUTE PAS ----
+                # C'est ici que se joue tout le projet. Le modele a demande une
+                # action irreversible ; on l'enregistre comme PROPOSITION et on
+                # passe a la suite. Aucun fichier n'est ecrit, aucun message
+                # n'est envoye. L'utilisateur decidera (palier 4).
+                action = {
+                    "id": f"action-{len(actions_proposees) + 1}",
+                    "outil": nom,
+                    "arguments": arguments,
+                }
+                actions_proposees.append(action)
+
+                trace.append(
+                    {
+                        "outil": nom,
+                        "arguments": arguments,
+                        "statut": "proposee",
+                        "duree_ms": 0.0,
+                        "resultat": {"action_enregistree": action["id"]},
+                    }
+                )
+
+                # Ce qu'on renvoie AU MODELE. Le texte est explicite parce que
+                # sans lui, le modele annoncerait a l'utilisateur que le message
+                # est parti — alors qu'il ne l'est pas.
+                resultat = {
+                    "statut": "en_attente_de_validation",
+                    "action_id": action["id"],
+                    "message": (
+                        "Action enregistree comme PROPOSITION. Elle n'a PAS ete "
+                        "executee et ne le sera qu'apres validation explicite de "
+                        "l'utilisateur. Ne dis jamais qu'elle est faite : annonce "
+                        "que tu la proposes et qu'elle attend son accord."
+                    ),
+                }
+            else:
+                # ---- OUTIL DE LECTURE : on execute ----
+                # Au pire on a lu une donnee pour rien : rien n'est modifie.
+                # On chronometre l'appel — la duree fait partie de ce qu'on
+                # affiche a l'ecran (carte bonus "cout affiche").
+                #
+                # perf_counter() et pas time() : c'est une horloge monotone,
+                # concue pour mesurer des durees. time() peut reculer si le
+                # systeme resynchronise son horloge pendant la mesure.
+                debut = time.perf_counter()
+                resultat = tools.appeler_outil(nom, arguments)
+                duree_ms = round((time.perf_counter() - debut) * 1000, 1)
+
+                trace.append(
+                    {
+                        "outil": nom,
+                        "arguments": arguments,
+                        "statut": "executee",
+                        "duree_ms": duree_ms,
+                        "resultat": resultat,
+                    }
+                )
+
+            # Le resultat repart vers le modele comme un message "tool",
+            # rattache a la demande via tool_call_id. Serialise en JSON parce
+            # que le contenu d'un message doit etre du texte.
+            conversation.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": appel.id,
+                    "content": json.dumps(resultat, ensure_ascii=False),
+                }
+            )
+    else:
+        # La boucle for s'est terminee SANS `break` : MAX_TOOL_TURNS tours
+        # sont passes sans reponse finale. On ne plante pas pour autant — on
+        # le dit clairement, comme pour toute autre impossibilite.
+        texte = (
+            "Je n'ai pas reussi a conclure apres plusieurs appels d'outils. "
+            "Reessaie en reformulant ta demande."
+        )
 
     # `reponse.model` est le nom du modele tel que le fournisseur le nomme
     # reellement ; il peut differer de ce qu'on a demande. On garde le notre
     # en secours si le champ est absent.
-    modele_reel = reponse.model or MODELE
+    modele_reel = (reponse.model if reponse else None) or MODELE
 
     return ReponseLLM(
         texte=texte,
         modele=modele_reel,
-        tokens_entree=tokens_entree,
-        tokens_sortie=tokens_sortie,
-        cout_dollars=_cout(modele_reel, tokens_entree, tokens_sortie),
+        actions_proposees=actions_proposees,
+        tokens_entree=tokens_entree_total,
+        tokens_sortie=tokens_sortie_total,
+        cout_dollars=_cout(modele_reel, tokens_entree_total, tokens_sortie_total),
+        trace=trace,
     )

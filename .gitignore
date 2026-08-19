@@ -40,6 +40,8 @@ npm-debug.log*
 *.sqlite3
 outbox/*
 !outbox/.gitkeep
+documents/*
+!documents/.gitkeep
 
 # ==========================================================
 #  Systeme / editeurs
