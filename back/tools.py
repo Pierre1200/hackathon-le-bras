@@ -40,6 +40,8 @@ logger = logging.getLogger("le_bras.outils")
 
 DB_PATH = RACINE / os.getenv("DATABASE_URL", "sqlite:///./lebras.db").removeprefix("sqlite:///")
 OUTBOX_DIR = RACINE / os.getenv("OUTBOX_DIR", "./outbox")
+# Ou atterrissent les documents generes (fiches d'accueil, recapitulatifs).
+DOCS_DIR = RACINE / os.getenv("DOCS_DIR", "./documents")
 
 
 def _connexion() -> sqlite3.Connection:
@@ -79,6 +81,27 @@ def _initialiser_base() -> None:
             )
             """
         )
+        # MIGRATION : les premieres versions de la table n'avaient pas de
+        # colonne date_arrivee. CREATE TABLE IF NOT EXISTS ne la rajoute pas
+        # sur une base deja creee — il faut donc l'ajouter a la main si elle
+        # manque. Sans ca, l'app planterait chez celui qui a une vieille base.
+        colonnes = {ligne[1] for ligne in db.execute("PRAGMA table_info(employes)")}
+        if "date_arrivee" not in colonnes:
+            db.execute("ALTER TABLE employes ADD COLUMN date_arrivee TEXT DEFAULT ''")
+
+        # Les tickets d'onboarding, crees par creer_ticket.
+        db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS tickets (
+                id INTEGER PRIMARY KEY,
+                titre TEXT NOT NULL,
+                description TEXT NOT NULL,
+                assigne_a TEXT NOT NULL,
+                cree_le TEXT NOT NULL
+            )
+            """
+        )
+
         (nb,) = db.execute("SELECT COUNT(*) FROM employes").fetchone()
         if nb == 0:
             db.executemany(
@@ -95,6 +118,7 @@ def _initialiser_base() -> None:
 
 _initialiser_base()
 OUTBOX_DIR.mkdir(parents=True, exist_ok=True)
+DOCS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # =============================================================================
@@ -163,6 +187,61 @@ def envoyer_message(destinataire: str, sujet: str, corps: str) -> dict:
     chemin = OUTBOX_DIR / nom_fichier
     chemin.write_text(f"A : {destinataire}\nSujet : {sujet}\n\n{corps}\n", encoding="utf-8")
     return {"fichier": str(chemin.relative_to(RACINE)), "destinataire": destinataire, "sujet": sujet}
+
+
+def creer_fiche_employe(
+    nom: str, role: str, departement: str, email: str, date_arrivee: str
+) -> dict:
+    """Cree la fiche d'un nouvel employe dans l'annuaire (table employes).
+
+    EFFET DE BORD : ecrit une ligne en base. Une fois creee, la personne est
+    immediatement trouvable par lister_equipe et chercher_personne — la boucle
+    se referme sur elle-meme.
+
+    On renvoie l'identifiant de la ligne creee : c'est ce qui permettra
+    d'annuler l'action plus tard.
+    """
+    with _connexion() as db:
+        curseur = db.execute(
+            "INSERT INTO employes (nom, role, departement, email, date_arrivee)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (nom, role, departement, email, date_arrivee),
+        )
+        identifiant = curseur.lastrowid
+    return {"id": identifiant, "nom": nom, "email": email, "departement": departement}
+
+
+def creer_ticket(titre: str, description: str, assigne_a: str) -> dict:
+    """Cree un ticket dans le suivi des taches (table tickets).
+
+    EFFET DE BORD : ecrit une ligne en base.
+
+    On renvoie l'identifiant du ticket cree, pour pouvoir l'annuler.
+    """
+    with _connexion() as db:
+        curseur = db.execute(
+            "INSERT INTO tickets (titre, description, assigne_a, cree_le)"
+            " VALUES (?, ?, ?, ?)",
+            (titre, description, assigne_a, datetime.now(timezone.utc).isoformat()),
+        )
+        identifiant = curseur.lastrowid
+    return {"id": identifiant, "titre": titre, "assigne_a": assigne_a}
+
+
+def generer_document(nom_fichier: str, contenu: str) -> dict:
+    """Ecrit un document texte dans documents/.
+
+    EFFET DE BORD : cree un vrai fichier sur disque.
+
+    SECURITE : on ne fait jamais confiance au nom de fichier propose par le
+    modele. Path(...).name ne garde que le dernier element du chemin, ce qui
+    neutralise une tentative comme "../../.env" — sans cette ligne, l'agent
+    pourrait ecrire n'importe ou sur le disque.
+    """
+    nom_propre = Path(nom_fichier).name or "document.md"
+    chemin = DOCS_DIR / nom_propre
+    chemin.write_text(contenu, encoding="utf-8")
+    return {"fichier": str(chemin.relative_to(RACINE)), "taille_octets": len(contenu)}
 
 
 # =============================================================================
@@ -244,12 +323,109 @@ SCHEMA_CHERCHER_PERSONNE = {
     },
 }
 
-SCHEMAS = [SCHEMA_LISTER_EQUIPE, SCHEMA_CHERCHER_PERSONNE, SCHEMA_ENVOYER_MESSAGE]
+SCHEMA_CREER_FICHE_EMPLOYE = {
+    "type": "function",
+    "function": {
+        "name": "creer_fiche_employe",
+        "description": (
+            "Cree la fiche d'un NOUVEL employe dans l'annuaire de l'entreprise. "
+            "A utiliser quand quelqu'un rejoint l'equipe et n'existe pas encore "
+            "dans l'annuaire. Verifie d'abord avec chercher_personne qu'elle n'y "
+            "est pas deja : ne cree jamais deux fiches pour la meme personne. "
+            "N'invente aucune des valeurs — si le role, le departement, l'email "
+            "ou la date d'arrivee ne sont pas fournis, demande-les."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "nom": {"type": "string", "description": "Nom complet, ex: 'Sarah Martin'."},
+                "role": {"type": "string", "description": "Intitule du poste, ex: 'Developpeuse back-end'."},
+                "departement": {
+                    "type": "string",
+                    "description": "Departement d'affectation, ex: 'Ingenierie', 'Design', 'RH', 'Marketing'.",
+                },
+                "email": {"type": "string", "description": "Adresse email professionnelle."},
+                "date_arrivee": {
+                    "type": "string",
+                    "description": "Date d'arrivee au format AAAA-MM-JJ.",
+                },
+            },
+            "required": ["nom", "role", "departement", "email", "date_arrivee"],
+        },
+    },
+}
+
+SCHEMA_CREER_TICKET = {
+    "type": "function",
+    "function": {
+        "name": "creer_ticket",
+        "description": (
+            "Cree un ticket de suivi assigne a quelqu'un, pour une tache a faire "
+            "(preparer un poste de travail, ouvrir des acces, commander du "
+            "materiel...). A utiliser quand une tache doit etre prise en charge "
+            "par une personne de l'equipe. "
+            "Ne confonds pas avec envoyer_message : un ticket est une TACHE a "
+            "realiser et qui reste ouverte, un message est une simple information "
+            "transmise."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "titre": {"type": "string", "description": "Titre court de la tache."},
+                "description": {"type": "string", "description": "Ce qu'il faut faire, en detail."},
+                "assigne_a": {
+                    "type": "string",
+                    "description": "Nom ou email de la personne chargee de la tache.",
+                },
+            },
+            "required": ["titre", "description", "assigne_a"],
+        },
+    },
+}
+
+SCHEMA_GENERER_DOCUMENT = {
+    "type": "function",
+    "function": {
+        "name": "generer_document",
+        "description": (
+            "Ecrit un document texte sur disque : livret d'accueil, recapitulatif, "
+            "note d'organisation. A utiliser quand l'utilisateur demande un "
+            "document, un recapitulatif ou un guide a conserver. "
+            "Ne confonds pas avec envoyer_message : un document est un fichier "
+            "qu'on garde, un message est adresse a quelqu'un."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "nom_fichier": {
+                    "type": "string",
+                    "description": "Nom du fichier, sans chemin, ex: 'accueil-sarah-martin.md'.",
+                },
+                "contenu": {"type": "string", "description": "Le contenu complet du document."},
+            },
+            "required": ["nom_fichier", "contenu"],
+        },
+    },
+}
+
+SCHEMAS = [
+    # Consultation — sans effet de bord
+    SCHEMA_LISTER_EQUIPE,
+    SCHEMA_CHERCHER_PERSONNE,
+    # Action — avec effet de bord, donc jamais executes par la boucle
+    SCHEMA_CREER_FICHE_EMPLOYE,
+    SCHEMA_CREER_TICKET,
+    SCHEMA_ENVOYER_MESSAGE,
+    SCHEMA_GENERER_DOCUMENT,
+]
 
 OUTILS = {
     "lister_equipe": lister_equipe,
     "chercher_personne": chercher_personne,
+    "creer_fiche_employe": creer_fiche_employe,
+    "creer_ticket": creer_ticket,
     "envoyer_message": envoyer_message,
+    "generer_document": generer_document,
 }
 
 # =============================================================================
@@ -269,12 +445,90 @@ OUTILS = {
 # Ajouter un outil d'ecriture sans l'inscrire ici serait le seul moyen de
 # casser cette garantie : c'est pour ca que la liste est courte, explicite,
 # et placee juste sous la table des outils.
-OUTILS_A_EFFET_DE_BORD = {"envoyer_message"}
+OUTILS_A_EFFET_DE_BORD = {
+    "creer_fiche_employe",
+    "creer_ticket",
+    "envoyer_message",
+    "generer_document",
+}
 
 
 def a_un_effet_de_bord(nom: str) -> bool:
     """Dit si un outil modifie quelque chose hors du programme."""
     return nom in OUTILS_A_EFFET_DE_BORD
+
+
+# =============================================================================
+# LES ANNULATIONS — defaire ce qu'un outil a fait
+# =============================================================================
+# Chaque outil a effet de bord doit avoir son inverse, sinon l'utilisateur ne
+# peut pas revenir en arriere. Une annulation prend le RESULTAT de l'action
+# d'origine (qui contient l'identifiant de la ligne creee ou le chemin du
+# fichier ecrit) et defait l'effet.
+#
+# C'est pour ca que chaque outil d'action renvoie de quoi s'annuler : sans
+# l'identifiant, on ne saurait pas quelle ligne supprimer.
+
+def _annuler_creer_fiche_employe(resultat: dict) -> dict:
+    with _connexion() as db:
+        db.execute("DELETE FROM employes WHERE id = ?", (resultat["id"],))
+    return {"annule": f"fiche employe #{resultat['id']} supprimee"}
+
+
+def _annuler_creer_ticket(resultat: dict) -> dict:
+    with _connexion() as db:
+        db.execute("DELETE FROM tickets WHERE id = ?", (resultat["id"],))
+    return {"annule": f"ticket #{resultat['id']} supprime"}
+
+
+def _annuler_fichier(resultat: dict) -> dict:
+    """Annulation commune a envoyer_message et generer_document : les deux
+    ont ecrit un fichier, les deux s'annulent en le supprimant."""
+    chemin = (RACINE / resultat["fichier"]).resolve()
+
+    # SECURITE : on ne supprime que sous la racine du projet. Le chemin vient
+    # de notre propre code, mais une verification coute une ligne et evite
+    # qu'une donnee corrompue en base ne fasse supprimer un fichier ailleurs.
+    if not chemin.is_relative_to(RACINE.resolve()):
+        raise ValueError(f"Chemin hors du projet : {resultat['fichier']}")
+
+    # missing_ok=True : si le fichier a deja disparu (supprime a la main),
+    # l'annulation reussit quand meme. Le but est que le fichier n'existe
+    # plus — il n'existe plus.
+    chemin.unlink(missing_ok=True)
+    return {"annule": f"fichier {resultat['fichier']} supprime"}
+
+
+ANNULATIONS = {
+    "creer_fiche_employe": _annuler_creer_fiche_employe,
+    "creer_ticket": _annuler_creer_ticket,
+    "envoyer_message": _annuler_fichier,
+    "generer_document": _annuler_fichier,
+}
+
+
+def peut_etre_annule(nom: str) -> bool:
+    """Dit si un outil sait defaire ce qu'il a fait."""
+    return nom in ANNULATIONS
+
+
+def annuler_outil(nom: str, resultat: dict) -> dict:
+    """
+    Defait une action executee. Meme contrat que appeler_outil : ne leve
+    jamais d'exception, renvoie soit un resultat, soit {"erreur": ...}.
+    """
+    inverse = ANNULATIONS.get(nom)
+    if inverse is None:
+        return {"erreur": f"L'outil '{nom}' ne sait pas s'annuler."}
+
+    try:
+        resultat_annulation = inverse(resultat)
+    except Exception as e:
+        logger.warning("annulation de %s a echoue: %s", nom, e)
+        return {"erreur": f"L'annulation de '{nom}' a echoue : {e}"}
+
+    logger.info("annulation de %s -> %s", nom, resultat_annulation)
+    return resultat_annulation
 
 
 def appeler_outil(nom: str, arguments: dict) -> dict:
