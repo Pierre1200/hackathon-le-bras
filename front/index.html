@@ -36,7 +36,7 @@
       <form id="message-form">
         <textarea
           id="message"
-          placeholder="Bonjour, réponds en une phrase."
+          placeholder="Prépare l'arrivée de Sarah Martin, développeuse back-end, le 24 août."
           rows="3"
           maxlength="2000"
           required
@@ -44,16 +44,28 @@
         <button type="submit" id="submit-btn">Envoyer</button>
       </form>
 
+      <div id="erreur" class="erreur" hidden></div>
+
       <div id="result" class="result" hidden></div>
+
+      <div id="actions" class="actions" hidden>
+        <p class="actions__titre">Actions</p>
+        <ul id="actions-liste" class="actions__liste"></ul>
+        <button id="executer-btn" type="button" class="executer-btn" hidden>Exécuter</button>
+      </div>
+
       <div id="trace" class="trace" hidden>
         <p class="trace__titre">Outils appelés</p>
         <ol id="trace-liste" class="trace__liste"></ol>
       </div>
-      <div id="propositions" class="propositions" hidden>
-        <p class="propositions__titre">Actions proposées — en attente de votre accord</p>
-        <ul id="propositions-liste" class="propositions__liste"></ul>
-      </div>
     </main>
+
+    <section class="journal fade-in" style="--delay: 260ms">
+      <button id="journal-toggle" type="button" class="journal__toggle">Journal d'audit</button>
+      <div id="journal-panel" class="journal__panel" hidden>
+        <ul id="journal-liste" class="journal__liste"></ul>
+      </div>
+    </section>
   </div>
 
   <script src="app.js"></script>
