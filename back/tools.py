@@ -630,6 +630,61 @@ def annuler_outil(nom: str, resultat: dict) -> dict:
     return resultat_annulation
 
 
+# Index des schemas par nom d'outil, construit une fois : la validation
+# ci-dessous a besoin de retrouver le schema d'un outil a chaque appel.
+SCHEMAS_PAR_NOM = {s["function"]["name"]: s for s in SCHEMAS}
+
+
+def _verifier_arguments(nom: str, arguments: dict) -> str | None:
+    """
+    Compare les arguments proposes par le modele au schema de l'outil.
+
+    Renvoie None si tout va bien, sinon un message d'erreur explicite.
+
+    POURQUOI CETTE VERIFICATION EXISTE
+    ----------------------------------
+    On a perdu le typage strict du SDK natif en passant a un client universel,
+    pour que n'importe qui puisse brancher son fournisseur. Consequence : rien
+    ne garantit que le modele respecte nos schemas. Constate en vrai avec un
+    modele local plus faible, qui proposait
+        {"prenom": ..., "nom": ..., "contenu_de_la_messsage": ...}
+    la ou l'outil attend destinataire, sujet et corps.
+
+    Sans cette verification, Python levait un TypeError du genre
+    "missing 1 required positional argument", attrape plus bas et affiche tel
+    quel a l'utilisateur. Le message etait juste mais incomprehensible : il
+    parle de Python, pas du probleme.
+
+    On verifie donc AVANT d'appeler, et on dit precisement ce qui manque et ce
+    qui est en trop. Le modele lit ce message et peut se corriger au tour
+    suivant ; l'utilisateur, lui, comprend ce qui s'est passe.
+    """
+    schema = SCHEMAS_PAR_NOM.get(nom)
+    if schema is None:
+        return None  # outil sans schema : rien a verifier
+
+    parametres = schema["function"]["parameters"]
+    attendus = set(parametres.get("properties", {}))
+    requis = set(parametres.get("required", []))
+    fournis = set(arguments)
+
+    manquants = sorted(requis - fournis)
+    inconnus = sorted(fournis - attendus)
+
+    if not manquants and not inconnus:
+        return None
+
+    details = []
+    if manquants:
+        details.append(f"il manque {', '.join(manquants)}")
+    if inconnus:
+        details.append(f"{', '.join(inconnus)} n'existe pas")
+    return (
+        f"Arguments invalides pour '{nom}' : {' ; '.join(details)}. "
+        f"Attendus : {', '.join(sorted(attendus))}."
+    )
+
+
 def appeler_outil(nom: str, arguments: dict) -> dict:
     """
     Execute un outil par son nom et rend un resultat toujours serialisable.
@@ -646,6 +701,14 @@ def appeler_outil(nom: str, arguments: dict) -> dict:
     if fonction is None:
         logger.warning("outil demande introuvable ou debranche: %s", nom)
         return {"erreur": f"L'outil '{nom}' n'existe pas ou est desactive."}
+
+    # On valide AVANT d'appeler : un argument invalide ne doit pas produire une
+    # erreur Python brute, mais un message que le modele et l'utilisateur
+    # comprennent tous les deux.
+    probleme = _verifier_arguments(nom, arguments)
+    if probleme is not None:
+        logger.warning("arguments refuses pour %s: %s", nom, probleme)
+        return {"erreur": probleme}
 
     try:
         resultat = fonction(**arguments)
