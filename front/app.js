@@ -14,6 +14,8 @@ const submitBtn = document.getElementById("submit-btn");
 const erreurEl = document.getElementById("erreur");
 const result = document.getElementById("result");
 const trace = document.getElementById("trace");
+const traceToggle = document.getElementById("trace-toggle");
+const traceResume = document.getElementById("trace-resume");
 const traceListe = document.getElementById("trace-liste");
 const actionsPanel = document.getElementById("actions");
 const actionsListe = document.getElementById("actions-liste");
@@ -68,7 +70,9 @@ function masquerErreur() {
 
 // ---------------------------------------------------------------------------
 // Panneau debug : la séquence des outils réellement appelés pour produire
-// la réponse. Doit être montrable en 30 secondes, sans ajouter de print.
+// la réponse. Replié par défaut (un clic suffit) pour ne pas noyer la vraie
+// décision à prendre — les actions — sous du détail technique. Reste
+// montrable en 30 secondes, jamais à plus d'un clic.
 // ---------------------------------------------------------------------------
 function afficherTrace(outils) {
   traceListe.replaceChildren();
@@ -77,6 +81,11 @@ function afficherTrace(outils) {
     trace.hidden = true;
     return;
   }
+
+  const n = outils.length;
+  traceResume.textContent = `${n} outil${n > 1 ? "s" : ""} appelé${n > 1 ? "s" : ""}`;
+  traceListe.hidden = true;
+  traceToggle.classList.remove("ouvert");
 
   for (const appel of outils) {
     const item = document.createElement("li");
@@ -120,6 +129,11 @@ function afficherTrace(outils) {
 
   trace.hidden = false;
 }
+
+traceToggle.addEventListener("click", () => {
+  traceListe.hidden = !traceListe.hidden;
+  traceToggle.classList.toggle("ouvert", !traceListe.hidden);
+});
 
 // ---------------------------------------------------------------------------
 // Panneau "actions" : une carte par action du plan, quel que soit son statut.
@@ -449,6 +463,7 @@ journalToggle.addEventListener("click", async () => {
   // Deuxième clic = replier, pas besoin de rappeler le back.
   if (!journalPanel.hidden) {
     journalPanel.hidden = true;
+    journalToggle.classList.remove("ouvert");
     return;
   }
 
@@ -480,6 +495,7 @@ journalToggle.addEventListener("click", async () => {
       }
     }
     journalPanel.hidden = false;
+    journalToggle.classList.add("ouvert");
   } catch (error) {
     afficherErreur(error.message);
   } finally {

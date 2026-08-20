@@ -18,7 +18,8 @@
           <defs>
             <linearGradient id="mark-gradient" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
               <stop offset="0" stop-color="#9db1ff" />
-              <stop offset="1" stop-color="#5f7cff" />
+              <stop offset="0.6" stop-color="#a78bfa" />
+              <stop offset="1" stop-color="#ff8fb1" />
             </linearGradient>
           </defs>
         </svg>
@@ -27,12 +28,12 @@
       <p class="subtitle">Un agent qui ne se contente pas de parler : il agit. Mais rien ne part sans vous.</p>
     </header>
 
-    <div id="status" class="status status--unknown fade-in" style="--delay: 100ms">
+    <div id="status" class="status status--unknown fade-in" style="--delay: 220ms">
       <span class="status__dot"></span>
       <span id="status-text">Vérification du serveur…</span>
     </div>
 
-    <main class="fade-in" style="--delay: 180ms">
+    <main class="fade-in" style="--delay: 400ms">
       <form id="message-form">
         <textarea
           id="message"
@@ -55,13 +56,19 @@
       </div>
 
       <div id="trace" class="trace" hidden>
-        <p class="trace__titre">Outils appelés</p>
-        <ol id="trace-liste" class="trace__liste"></ol>
+        <button id="trace-toggle" type="button" class="trace__toggle">
+          <span id="trace-resume">Outils appelés</span>
+          <span class="chevron" aria-hidden="true"></span>
+        </button>
+        <ol id="trace-liste" class="trace__liste" hidden></ol>
       </div>
     </main>
 
-    <section class="journal fade-in" style="--delay: 260ms">
-      <button id="journal-toggle" type="button" class="journal__toggle">Journal d'audit</button>
+    <section class="journal fade-in" style="--delay: 580ms">
+      <button id="journal-toggle" type="button" class="journal__toggle">
+        <span>Journal d'audit</span>
+        <span class="chevron" aria-hidden="true"></span>
+      </button>
       <div id="journal-panel" class="journal__panel" hidden>
         <ul id="journal-liste" class="journal__liste"></ul>
       </div>
