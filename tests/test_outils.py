@@ -51,6 +51,48 @@ def test_annuler_un_outil_qui_ne_sait_pas_s_annuler():
 
 
 # ---------------------------------------------------------------------------
+# Validation des arguments proposes par le modele
+# ---------------------------------------------------------------------------
+# Cas rencontre en vrai avec un modele local plus faible : il inventait des
+# noms de parametres. Sans validation, Python levait un TypeError affiche tel
+# quel a l'utilisateur.
+
+def test_argument_obligatoire_manquant_est_refuse_avant_execution():
+    resultat = tools.appeler_outil(
+        "creer_ticket", {"titre": "T", "description": "D"}  # assigne_a manque
+    )
+    assert "erreur" in resultat
+    assert "assigne_a" in resultat["erreur"]
+
+    # Et surtout : rien n'a ete ecrit en base.
+    import sqlite3
+    with sqlite3.connect(tools.DB_PATH) as db:
+        assert db.execute("SELECT COUNT(*) FROM tickets").fetchone()[0] == 0
+
+
+def test_nom_de_parametre_invente_est_refuse():
+    """Le cas exact observe : le modele propose ses propres noms d'arguments."""
+    resultat = tools.appeler_outil(
+        "envoyer_message",
+        {"prenom": "Lucas", "nom": "Digne", "contenu_de_la_messsage": "Bienvenue"},
+    )
+    assert "erreur" in resultat
+    # Le message doit dire ce qui manque ET ce qui est en trop.
+    assert "destinataire" in resultat["erreur"]
+    assert "contenu_de_la_messsage" in resultat["erreur"]
+    assert not [f for f in tools.OUTBOX_DIR.glob("*") if f.is_file()]
+
+
+def test_arguments_valides_passent():
+    """La validation ne doit pas bloquer un appel correct."""
+    resultat = tools.appeler_outil(
+        "creer_ticket", {"titre": "T", "description": "D", "assigne_a": "david"}
+    )
+    assert "erreur" not in resultat
+    assert "id" in resultat
+
+
+# ---------------------------------------------------------------------------
 # Securite
 # ---------------------------------------------------------------------------
 

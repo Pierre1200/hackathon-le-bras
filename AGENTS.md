@@ -262,7 +262,7 @@ présent serait un mensonge.
 
 ## 5. Les garde-fous
 
-Du plus solide au plus fragile. **Les quatre premiers sont structurels : ils
+Du plus solide au plus fragile. **Les cinq premiers sont structurels : ils
 tiennent même si le modèle est convaincu de faire n'importe quoi.**
 
 **1. Le modèle ne peut appeler que les outils déclarés.** Aucun accès au système
@@ -276,20 +276,29 @@ enregistre comme propositions. Vérifié : après une demande explicite d'envoi,
 **3. L'exécution exige un identifiant explicite.** Un seul chemin de code appelle
 un outil à effet de bord, et il part d'une liste transmise par l'utilisateur.
 
-**4. Aucune exception ne remonte d'un outil.** `appeler_outil()` et
+**4. Les arguments sont validés avant tout appel.** `appeler_outil()` compare
+ce que le modèle propose au schéma de l'outil et refuse ce qui ne colle pas,
+avec un message qui dit ce qui manque et ce qui est en trop. Le modèle peut se
+corriger au tour suivant ; l'utilisateur comprend ce qui s'est passé.
+
+**5. Aucune exception ne remonte d'un outil.** `appeler_outil()` et
 `annuler_outil()` attrapent tout et renvoient `{"erreur": …}`. Vérifié en
 débranchant un outil : HTTP 200, et l'agent annonce qu'il n'a pas pu.
 
-**5. La boucle est bornée** par `MAX_TOOL_TURNS`, et ne se relance qu'une fois.
+**6. La boucle est bornée** par `MAX_TOOL_TURNS`, et ne se relance qu'une fois.
 
-**6. Le prompt système** cadre le rôle et le discours. Seul garde-fou
+**7. Le prompt système** cadre le rôle et le discours. Seul garde-fou
 contournable, donc en dernier.
 
 ### Ce qui n'est pas encore fait
 
-- **Les arguments proposés ne sont pas validés.** En abandonnant le SDK natif
-  d'Anthropic pour un client universel, on a perdu la garantie de typage strict.
-  Rien ne certifie qu'une `date_arrivee` proposée soit au format `AAAA-MM-JJ`.
+- **La validation des arguments porte sur leur présence, pas sur leur type.**
+  `appeler_outil()` refuse un appel dont il manque un paramètre obligatoire, ou
+  qui en porte un qui n'existe pas — utile en vrai, un modèle local ayant
+  proposé `contenu_de_la_messsage` là où l'outil attend `corps`. En revanche,
+  rien ne certifie encore qu'une `date_arrivee` soit au format `AAAA-MM-JJ` :
+  on a perdu le typage strict en passant à un client universel, et on ne l'a
+  remplacé qu'à moitié.
 - **Pas de conversation multi-tours** — choix documenté dans `SPEC.md`.
 - **Pas de streaming** : la réponse s'affiche d'un bloc.
 

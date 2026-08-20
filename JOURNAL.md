@@ -161,10 +161,76 @@ l'aurait jamais vu — l'agent donnait la bonne réponse.
 
 ---
 
-## Ce qu'on retient, au-delà des six entrées
+## Entrée 7 — 19 août — Quand le prompt ne suffit pas, on vérifie
 
-**L'IA écrit vite du code qui a l'air juste.** Nos six problèmes ont tous passé
-la relecture superficielle. Cinq sur six ont été trouvés en exécutant, en
+**Contexte.** L'agent devait proposer un plan d'accueil complet : cinq actions,
+une par étape de la procédure de l'entreprise.
+
+**Ce qui s'est passé.** Après avoir consulté la procédure, il rédigeait les
+étapes **en texte** au lieu d'appeler les outils. Le paragraphe était juste,
+mais `actions_proposees` restait vide : aucune carte à l'écran, rien à
+approuver. Et de façon intermittente — ça marchait **une fois sur quatre**.
+
+**Ce qu'on a essayé, dans l'ordre.** Reformuler le prompt trois fois. Passer de
+4 à 8 tours d'outils, au cas où il manquerait de place. Tester un modèle plus
+gros — Claude Sonnet 5 a échoué exactement pareil. Corriger deux descriptions
+d'outils qui contredisaient le prompt : amélioré, mais toujours pas fiable.
+
+**Notre décision.** Arrêter de demander poliment. La boucle **vérifie sa propre
+sortie** : si l'agent a consulté la procédure d'accueil et n'a proposé aucune
+action, on relance **une fois** avec une consigne explicite. La condition est
+étroite — une simple question de consultation ne déclenche rien — et un drapeau
+garantit qu'on ne relance qu'une seule fois.
+
+**Ce que ça a coûté.** Environ une heure et cinquante centimes d'appels. Trois
+fausses pistes avant la bonne.
+
+**Leçon.** On a cherché dans le prompt parce que c'est là qu'on avait trouvé la
+solution les fois d'avant — l'entrée 5 nous avait appris qu'une phrase valait
+mieux que du code, et on a sur-appliqué la leçon. Un modèle qu'on doit supplier
+de respecter une consigne, on ne le supplie pas : on vérifie sa sortie et on
+relance. C'est du code, c'est déterministe, et ça se teste.
+
+**Ce que l'éval a servi à voir.** Deux campagnes successives sur exactement le
+même code : 94 % puis 100 %. Sans le score chiffré, on aurait conclu « ça
+marche » sur la campagne qui passait. C'est précisément ce que le sujet appelle
+« ne pas savoir si on régresse ».
+
+---
+
+## Entrée 8 — 19 août — Le même code, deux machines, deux résultats
+
+**Contexte.** Kevin n'avait pas de clé d'API. Grâce au choix du jour 1 — un
+client universel plutôt que le SDK d'un fournisseur — il a pu brancher un
+modèle local via Ollama et travailler sans nous attendre.
+
+**Ce qui s'est passé.** Chez lui, la moitié des actions échouaient alors que
+tout marchait chez l'autre. Son modèle proposait des noms de paramètres
+inventés : `contenu_de_la_messsage` — avec une faute de frappe — là où l'outil
+attend `corps`. L'application affichait alors une erreur Python brute :
+« missing 1 required positional argument ».
+
+**Notre décision.** Ne pas revenir en arrière sur le fournisseur
+interchangeable : c'est précisément ce qui lui avait permis de travailler. On a
+ajouté une **validation des arguments contre le schéma de l'outil**, avant tout
+appel. Un argument manquant ou inventé produit maintenant un message qui dit ce
+qui manque et ce qui est en trop — lisible par le modèle, qui peut se corriger,
+et par l'utilisateur, qui comprend.
+
+**Ce que ça a coûté.** Vingt minutes, et trois tests de plus.
+
+**Leçon.** Deux choses. D'abord, notre message d'erreur était exact et inutile :
+il parlait de Python, pas du problème. Ensuite, la portabilité entre
+fournisseurs a un prix qu'on ne voit qu'en le payant — on avait écrit dans
+AGENTS.md que le typage strict nous manquerait, c'est resté théorique jusqu'au
+jour où un vrai modèle a proposé de vrais mauvais arguments.
+
+---
+
+## Ce qu'on retient, au-delà des huit entrées
+
+**L'IA écrit vite du code qui a l'air juste.** Nos huit problèmes ont tous passé
+la relecture superficielle. Sept sur huit ont été trouvés en exécutant, en
 mesurant ou en relisant notre propre spec — pas en lisant le code une fois.
 
 **Les bugs les plus coûteux étaient invisibles.** Le coût affiché à zéro et les
@@ -174,3 +240,8 @@ n'est pas une application qui fonctionne bien.
 **On a gardé la décision.** À chaque fois, l'outil proposait une solution
 plausible ; à chaque fois, le bon choix dépendait d'une contrainte qu'il ne
 pouvait pas connaître — notre spec, notre barème, ce qu'on saurait défendre.
+
+**Et une leçon qu'on a apprise deux fois.** L'entrée 5 nous a montré qu'une
+phrase de prompt valait mieux qu'une heure de code. L'entrée 7 nous a montré
+que l'inverse est vrai aussi. La vraie compétence n'est pas de savoir lequel
+des deux marche — c'est de savoir quand on s'entête dans le mauvais.
