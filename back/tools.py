@@ -195,7 +195,7 @@ def chercher_personne(nom: str) -> list[dict]:
 
 def envoyer_message(destinataire: str, sujet: str, corps: str) -> dict:
     """Ecrit un message dans outbox/ : notre faux service de messagerie
-    (voir SPEC.md — c'est un choix documente, pas un mock cache). Un vrai
+    (voir docs/SPEC.md — c'est un choix documente, pas un mock cache). Un vrai
     fichier est cree sur disque, avec un vrai risque d'erreur (droits,
     disque plein, etc.) que appeler_outil() saura rattraper."""
     horodatage = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")

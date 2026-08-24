@@ -7,6 +7,19 @@ Hackathon Full Stack Agentique IA — Holberton School. Sujet 03.
 
 ---
 
+## Documentation
+
+| Document | Contenu |
+|---|---|
+| [docs/SPEC.md](docs/SPEC.md) | Le cadrage : problème, user stories, **hors-scope**, architecture, outils typés, happy path |
+| [docs/AGENTS.md](docs/AGENTS.md) | La partie agentique : prompt système, outils, schéma de la boucle, **garde-fous** |
+| [docs/JOURNAL.md](docs/JOURNAL.md) | Notre travail avec l'IA — 8 entrées, ce qu'elle nous a fait gagner et perdre |
+| [docs/DEMO.md](docs/DEMO.md) | Le script de démonstration, minuté |
+| [docs/CONTRAT-API.md](docs/CONTRAT-API.md) | Le contrat d'interface entre le front et le back |
+| [eval/cases.md](eval/cases.md) | Les cas d'évaluation et l'historique des scores |
+
+---
+
 ## Quickstart
 
 **Prérequis :** Python 3.11+ et une clé d'API chez **n'importe quel fournisseur d'IA**
@@ -72,7 +85,7 @@ L'agent construit un plan d'actions concrètes, l'affiche, et **n'exécute que c
 l'utilisateur a approuvé, action par action**. Chaque exécution est tracée dans un
 journal d'audit consultable et annulable.
 
-Le détail du cadrage (scope, hors-scope, outils, démo) est dans [SPEC.md](SPEC.md).
+Le détail du cadrage (scope, hors-scope, outils, démo) est dans [SPEC.md](docs/SPEC.md).
 
 ---
 

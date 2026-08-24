@@ -40,7 +40,7 @@ from back import persistance, tools
 from back.llm import BASE_URL, MODELE, ErreurLLM, demander_au_modele
 
 # Prompt systeme provisoire pour le palier "outils" : le prompt definitif du
-# planificateur (voir AGENTS.md) viendra plus tard. Les deux regles qui
+# planificateur (voir docs/AGENTS.md) viendra plus tard. Les deux regles qui
 # comptent ici : ne pas inventer de donnees, et dire clairement quand un
 # outil a echoue plutot que de fabriquer une reponse a la place.
 PROMPT_SYSTEME = (

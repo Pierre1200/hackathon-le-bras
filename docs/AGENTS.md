@@ -319,7 +319,7 @@ contournable, donc en dernier.
 ## 6. Évaluation
 
 `make eval` rejoue sept cas et sort un score chiffré. Les cas et l'historique
-des campagnes sont dans [eval/cases.md](eval/cases.md).
+des campagnes sont dans [eval/cases.md](../eval/cases.md).
 
 Un cas d'évaluation existe pour chaque garantie de ce document, y compris
 l'injection de prompt et le plan complet — celui-là attrape précisément la
