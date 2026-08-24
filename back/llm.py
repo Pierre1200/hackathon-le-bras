@@ -71,7 +71,14 @@ MODELE = os.getenv("LLM_MODEL", "claude-haiku-4-5")
 # Plafond de tokens produits par reponse. C'est un garde-fou, pas une
 # facturation : on ne paie que ce qui est reellement produit. Il protege
 # surtout contre une reponse a rallonge si l'app est exposee publiquement.
-MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "1000"))
+#
+# ATTENTION : ce plafond doit tenir compte du PIRE cas, pas du cas courant.
+# Il etait a 1000, ce qui suffit pour une reponse en prose. Mais proposer un
+# plan d'accueil complet demande cinq appels d'outils, dont un message de
+# bienvenue et le contenu entier d'un livret : on depasse 1000 sans effort.
+# Le modele etait alors coupe en pleine generation et l'application affichait
+# une reponse vide. Constate en demonstration.
+MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "4000"))
 
 # Nombre maximum d'aller-retours modele <-> outils pour UNE question. Sans
 # ce plafond, un modele qui boucle sur un outil (ou un outil qui renvoie
@@ -274,6 +281,25 @@ def demander_au_modele(message: str, prompt_systeme: str = "") -> ReponseLLM:
             tokens_entree_total += usage.prompt_tokens
             tokens_sortie_total += usage.completion_tokens
 
+        # POURQUOI le modele s'est-il arrete ? On le verifie AVANT de lire ce
+        # qu'il a produit.
+        #
+        # "length" signifie qu'il a ete coupe en atteignant MAX_TOKENS. Ce qu'il
+        # a commence a ecrire est alors incomplet : un appel d'outil tronque a
+        # des arguments manquants, un texte tronque s'arrete au milieu d'une
+        # phrase. On ne peut faire confiance a rien de tout ca.
+        #
+        # Sans ce controle, l'application affichait une reponse VIDE, sans rien
+        # dire. C'est le pire comportement possible : l'utilisateur ne sait ni
+        # que ca a echoue, ni pourquoi. Mieux vaut une erreur franche.
+        raison_arret = reponse.choices[0].finish_reason
+        if raison_arret == "length":
+            raise ErreurLLM(
+                f"La reponse du modele a ete coupee : elle depassait le plafond "
+                f"de {MAX_TOKENS} tokens. Augmente LLM_MAX_TOKENS dans le .env, "
+                f"ou reformule ta demande en plus court."
+            )
+
         choix = reponse.choices[0].message
         demandes_outils = choix.tool_calls or []
 
@@ -282,6 +308,14 @@ def demander_au_modele(message: str, prompt_systeme: str = "") -> ReponseLLM:
             # `content` peut valoir None si le modele n'a produit que des
             # appels d'outils sans texte : `or ""` evite un crash sur .strip().
             texte = (choix.content or "").strip()
+
+            # ---- FILET : une reponse vide ne doit JAMAIS rester vide ----
+            # Meme si la cause n'est pas la troncature, un ecran vide ne dit
+            # rien a l'utilisateur. On prefere annoncer l'echec.
+            if not texte and not actions_proposees and not trace:
+                raise ErreurLLM(
+                    "Le modele n'a rien renvoye. Reessaie, ou reformule ta demande."
+                )
 
             # ---- GARDE-FOU : le plan decrit mais pas propose ----
             # Probleme observe en test, de facon intermittente : apres avoir

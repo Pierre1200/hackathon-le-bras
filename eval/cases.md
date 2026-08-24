@@ -110,6 +110,7 @@ déclarative — voir la section Sécurité du README.
 | 19 août, 13h56 | **100 %** (13/13) | 6/6 | 2,78 centimes | Première campagne — référence de départ. |
 | 19 août, 15h10 | **100 %** (13/13) | 6/6 | 3,08 centimes | Prompt système réécrit : deux régimes (consultation n'invente rien / action propose des valeurs complètes), conventions d'entreprise, absence de mémoire explicitée. Aucune régression. |
 | 19 août, 15h40 | **100 %** (16/16) | 7/7 | 6,89 centimes | Nouvel outil `procedure_accueil` + nouveau cas `plan_complet`. Relance automatique quand l'agent décrit un plan sans appeler les outils. |
+| 20 août, 11h20 | **100 %** (16/16) | 7/7 | 6,16 centimes | Plafond de tokens porté de 1000 à 4000 et détection de la troncature (`finish_reason`). Corrige une réponse vide constatée en démonstration. |
 
 **Comment lire ce tableau.** Une ligne par campagne, avec ce qu'on a modifié
 entre les deux. C'est la seule façon de savoir si un changement de prompt

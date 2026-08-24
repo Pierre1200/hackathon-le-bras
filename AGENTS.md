@@ -287,7 +287,19 @@ débranchant un outil : HTTP 200, et l'agent annonce qu'il n'a pas pu.
 
 **6. La boucle est bornée** par `MAX_TOOL_TURNS`, et ne se relance qu'une fois.
 
-**7. Le prompt système** cadre le rôle et le discours. Seul garde-fou
+**7. Une réponse coupée est signalée, jamais avalée.** On vérifie
+`finish_reason` avant de lire ce que le modèle a produit : à `"length"`, il a
+été coupé en atteignant `MAX_TOKENS`, donc ce qu'il a commencé à écrire est
+incomplet — un appel d'outil tronqué a des arguments manquants. On lève une
+erreur explicite plutôt que d'afficher un écran vide.
+
+Constaté en démonstration : le plafond était à 1000 tokens, ce qui suffit pour
+une réponse en prose mais pas pour cinq appels d'outils contenant un message de
+bienvenue et un livret d'accueil. L'application n'affichait rien, sans rien
+dire. Un échec silencieux est pire que le bug qui le cause. Plafond porté à
+4000, et la troncature est désormais annoncée.
+
+**8. Le prompt système** cadre le rôle et le discours. Seul garde-fou
 contournable, donc en dernier.
 
 ### Ce qui n'est pas encore fait

@@ -54,6 +54,10 @@ Prépare l'arrivée de Nadia Belkacem, développeuse full stack, le 15 septembre
 > qu'elle n'y est pas déjà, puis il va chercher la procédure d'accueil de
 > l'entreprise. Il ne devine pas ce qu'il faut faire : il lit la procédure. »
 
+⏱️ **Compter 15 secondes.** Huit appels d'outils s'enchaînent. C'est long à
+l'écran : il faut parler pendant, pas attendre en silence. Le paragraphe
+ci-dessus est calibré pour couvrir l'attente.
+
 **Quand le plan s'affiche :**
 
 > « Cinq actions proposées, une par étape de la procédure. Il a déduit son
